@@ -27,4 +27,4 @@
 | 🔢 Nonce Size | 12 bytes |
 | **🔐 Security Notes** | - 🔄 Cryptographically secure RNG<br>- ✅ Automatic integrity verification<br>- 🧹 Cleanup on failure<br>- 🛡️ Protection against common attacks |
 | **📜 License** | MIT License - Free for everyone |
-| **📸 Preview** | ![App Screenshot]([screenshot.png]([https://github.com/logand166/Encryptor/blob/b23b5a84c050397ad2834e65e4247fec48920bcc/Screenshot.jpg](https://github.com/logand166/Encryptor/blob/main/Screenshot.jpg?raw=true))) |
+| **📸 Preview** | ![App Screenshot](https://github.com/logand166/Encryptor/blob/main/Screenshot.jpg?raw=true) |
