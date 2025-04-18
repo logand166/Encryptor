@@ -1,31 +1,40 @@
-# 🔒 Secure File Encryptor/Decryptor 🛡️
+# 🔒 Secure File Encryptor/Decryptor V2.0 🛡️ (Enhanced Edition)
 
 | Section | Content |
 |---------|---------|
-| **🌟 Description** | A secure GUI tool for file encryption/decryption using military-grade AES-GCM encryption |
-| **✨ Features** | |
-| 🔐 Encryption | AES-GCM 256-bit encryption (NSA-approved) |
-| 🔓 Decryption | Authenticated decryption with tamper detection |
-| 📁 Large Files | Supports huge files up to 10GB (chunked processing) |
-| 🖥️ GUI | Beautiful PyQt5 interface with dark theme |
-| 🔑 Security | PBKDF2-HMAC-SHA256 with 600,000 iterations |
-| **📦 Requirements** | |
-| 🐍 Python Version | 3.6+ (Recommended: 3.8+) |
-| 💻 System | Windows/macOS/Linux |
-| 📚 Dependencies | `PyQt5`, `cryptography`, `qt_material` |
-| ⚙️ Install Command | `pip install PyQt5 cryptography qt_material` |
-| **📋 Usage Guide** | |
-| 🔒 Encryption | 1. Click "Select File"<br>2. Set output path (.encrypted)<br>3. Enter password + confirmation<br>4. Click "Start Encryption"<br>5. Wait for completion ✅ |
-| 🔓 Decryption | 1. Click "Select Encrypted File"<br>2. Set output path<br>3. Enter original password<br>4. Click "Start Decryption"<br>5. Get your original file back ✅ |
-| ⚠️ Important | - Never lose your password!<br>- Keep backups of important files<br>- Cancel operations using window close |
-| **⚙️ Technical Specs** | |
-| 🛠️ Algorithm | AES-GCM (Authenticated Encryption) |
-| 🔑 Key Size | 256-bit (Military Grade) |
-| 🔄 Iterations | 600,000 (NIST Recommended) |
-| 🧩 Chunk Size | 1MB (Optimal Performance) |
-| 🧂 Salt Size | 16 bytes |
-| 🔢 Nonce Size | 12 bytes |
-| **🔐 Security Notes** | - 🔄 Cryptographically secure RNG<br>- ✅ Automatic integrity verification<br>- 🧹 Cleanup on failure<br>- 🛡️ Protection against common attacks |
+| **🌟 Description** | An upgraded secure GUI tool with new security features and enhanced UX |
+| **✨ New Features** | |
+| 📊 Password Strength Meter | Real-time visual feedback on password complexity (color-coded) |
+| 👁️‍🗨️ Password Visibility Toggle | Show/hide passwords during entry |
+| 🗑️ Secure File Deletion | Optional permanent deletion of source files after processing |
+| 📈 Improved Progress Tracking | Detailed logging and accurate progress bars |
+| **🔐 Enhanced Security** | |
+| 🛡️ Unique Nonce per Chunk | Fixed vulnerability of nonce reuse in chunked encryption |
+| 🧩 Chunk Sequence Validation | Additional data binding prevents chunk tampering |
+| 🧹 Secure Temp Cleanup | Better error handling and file cleanup |
+| **📋 Updated Usage Guide** | |
+| 🔒 Encryption | 1. Select file<br>2. Set password (watch strength meter)<br>3. Choose output path<br>4. Toggle options:<br>   - 👁️ Show password<br>   - 🗑️ Delete original<br>5. Start encryption |
+| 🔓 Decryption | 1. Select encrypted file<br>2. Enter password<br>3. Auto-generated output name (.decrypted)<br>4. Start decryption |
+| **⚙️ Technical Upgrades** | |
+| 🔄 Chunk Processing | Now uses:<br>- Unique nonce per chunk<br>- Additional data binding<br>- Better memory management |
+| 🛠️ Code Structure | Improved error handling and thread safety |
 | **📜 License** | MIT License - Free for everyone |
-| **📸 Preview** | ![App Screenshot](https://github.com/logand166/Encryptor/blob/main/Screenshot.jpg?raw=true) |
-| **☕ Support** | [Buy Me a Coffee](https://www.buymeacoffee.com/logand) <a href="https://www.buymeacoffee.com/logand"><img src="https://img.buymeacoffee.com/button-api/?text=Buy me a coffee&emoji=&slug=logand&button_colour=40DCA5&font_colour=ffffff&font_family=Cookie&outline_colour=000000&coffee_colour=FFDD00" height="25"/></a> |
+| **⬇️ Installation** | `pip install PyQt5 cryptography qt_material` |
+| **📸 UI Preview** | ![Enhanced UI](https://github.com/logand166/Encryptor/blob/main/Screenshot2.jpg) |
+
+## 🆚 Feature Comparison
+
+| Feature | Original | Enhanced |
+|---------|----------|----------|
+| Password Feedback | ❌ None | ✅ Strength meter + colors |
+| Security Level | ⚠️ Chunk vulnerability | 🔐 Fixed nonce reuse |
+| File Management | Basic cleanup | 🧹 Secure temp deletion |
+| UX | Standard | 👁️‍🗨️ Toggleable passwords |
+
+## 🚀 Why Upgrade?
+- Military-grade security fixes
+- Professional UX improvements
+- Transparent operation logging
+- Safer file handling
+
+> 💡 Pro Tip: Always verify file integrity after decryption!
