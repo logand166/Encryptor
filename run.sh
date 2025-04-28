@@ -1,0 +1,12 @@
+#!/bin/bash
+
+# activate the virtual environment
+conda activate BASIC
+
+# Check if QT_QPA_PLATFORM is set to xcb
+if [ "$QT_QPA_PLATFORM" != "xcb" ]; then
+    export QT_QPA_PLATFORM=xcb
+fi
+
+# Run the main.py script
+python3 main.py
