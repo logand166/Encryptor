@@ -1,6 +1,26 @@
 from PyQt5.QtGui import QColor
 import re
 
+from mnemonic import Mnemonic
+from unidecode import unidecode
+
+LANGUAGES = {
+    "en": "english",
+    "zh": "chinese_simplified",
+    "zh2": "chinese_traditional",
+    "fr": "french",
+    "it": "italian",
+    "ja": "japanese",
+    "ko": "korean",
+    "es": "spanish",
+}
+
+STRENGTHS = [128, 160, 192, 224, 256]
+
+LENGTHS = [12, 15, 18, 21, 24]
+
+LENGTH_STRENGTH = dict(zip(LENGTHS, STRENGTHS))
+
 
 class PasswordStrengthMeter:
     @staticmethod
@@ -41,3 +61,20 @@ class PasswordStrengthMeter:
             return QColor(255, 255, 0)  # Yellow
         else:
             return QColor(0, 255, 0)  # Green
+
+
+
+def strength(length: int) -> int:
+    strength = LENGTH_STRENGTH[length]
+    return strength
+
+
+def generate_seed(strength: int, lang: str) -> str:
+    mnemo = Mnemonic(LANGUAGES[lang])
+
+    seed_phrase = mnemo.generate(strength=strength)
+    seed_list = seed_phrase.split()
+    final_seed_list = [unidecode(word) for word in seed_list]
+    final_seed_phrase = " ".join(final_seed_list)
+
+    return final_seed_phrase
