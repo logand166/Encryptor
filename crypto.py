@@ -6,6 +6,7 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.exceptions import InvalidTag
 
+from utilities import generate_seed_phrase
 
 # Constants
 CHUNK_SIZE = 1024 * 1024  # 1MB chunks
@@ -328,17 +329,82 @@ class DriveCrypto:
         return self.directory_structure, self.file_structure
 
 
-if __name__ == "__main__":
-    # Example usage
-    # drive is a usb called Test Drive
-    drive_path = "/media/lenovo/Test Drive"
-    if not os.path.exists(drive_path):
-        print(f"Drive not found: {drive_path}")
-        exit(1)
-    print(f"Drive path: {drive_path}")
-    drive_crypto = DriveCrypto(drive_path)
+class PasswordRecovery:
+    def __init__(self, drive_path, key):
+        self.drive_path = drive_path
+        self.key = key
+        self.recovery_key = None
+        
+        # save recovery key to a file
+        key_path = os.path.join(self.drive_path, "recovery.key")
+        with open(key_path, "w") as f:
+            f.write(self.key)
+        print(f"Recovery key saved to {key_path}")
     
-    # drive_crypto.visualize_directory_structure()
-    # drive_crypto.encrypt("testpassword")
-    drive_crypto.decrypt("testpassword")
-    drive_crypto.visualize_directory_structure()
+    def setup_key_recovery(self, strategy):
+        """
+        Setup key recovery strategy
+        """
+
+        if strategy == "seed_phrase":
+            self.recovery_key = generate_seed_phrase(256, "en")
+        else:
+            raise ValueError("Invalid recovery strategy")
+    
+    def get_recovery_key(self, strategy, recovery_key_items: dict):
+        """
+        Get the recovery key
+        """
+        
+        if strategy == "seed_phrase":
+            self.recovery_key = recovery_key_items.get("seed_phrase")
+        else:
+            raise ValueError("Invalid recovery strategy")
+
+        if not self.recovery_key:
+            raise ValueError("Recovery key not set up")
+
+        return self.recovery_key
+
+    def encrypt_recovery_key(self):
+        """
+        Encrypt the recovery.key file using only the recovery key
+        """
+        
+        if not self.recovery_key:
+            raise ValueError("Recovery key not set up")
+
+        # Encrypt the recovery key using the derived key
+        salt = secrets.token_bytes(SALT_SIZE)
+        key = CryptoManager.derive_key(self.recovery_key, salt)
+
+        CryptoManager.encrypt_file(
+            os.path.join(self.drive_path, "recovery.key"),
+            os.path.join(self.drive_path, "recovery.key"),
+            self.recovery_key,
+        )
+        
+        print("Recovery key encrypted and saved to encrypted_recovery.key")
+        
+    def decrypt_recovery_key(self, password):
+        """
+        Decrypt the recovery.key file using the provided password
+        """
+        
+        if not self.recovery_key:
+            raise ValueError("Recovery key not set up")
+
+        file_path = os.path.join(self.drive_path, "recovery.key")
+        
+        print(f"Decrypting {file_path}")
+        src_path = os.path.join(self.drive_path, file_path)
+        dest_path = os.path.join(self.drive_path, file_path[:-4])
+        self.crypto_worker = CryptoWorker(
+            "decrypt", src_path, dest_path, password
+        )
+        self.crypto_worker.set_delete_original(True)
+        self.crypto_worker.run()
+        print(f"Decrypted {file_path} to {dest_path}")
+
+if __name__ == "__main__":
+    pass
