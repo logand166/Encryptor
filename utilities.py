@@ -63,13 +63,12 @@ class PasswordStrengthMeter:
             return QColor(0, 255, 0)  # Green
 
 
-
 def strength(length: int) -> int:
     strength = LENGTH_STRENGTH[length]
     return strength
 
 
-def generate_seed(strength: int, lang: str) -> str:
+def generate_seed_phrase(strength: int, lang: str) -> str:
     mnemo = Mnemonic(LANGUAGES[lang])
 
     seed_phrase = mnemo.generate(strength=strength)

@@ -29,3 +29,7 @@
 | **📜 License** | MIT License - Free for everyone |
 | **📸 Preview** | ![App Screenshot](https://github.com/logand166/Encryptor/blob/main/Screenshot.jpg?raw=true) |
 | **☕ Support** | [Buy Me a Coffee](https://www.buymeacoffee.com/logand) <a href="https://www.buymeacoffee.com/logand"><img src="https://img.buymeacoffee.com/button-api/?text=Buy me a coffee&emoji=&slug=logand&button_colour=40DCA5&font_colour=ffffff&font_family=Cookie&outline_colour=000000&coffee_colour=FFDD00" height="25"/></a> |
+
+
+using python 3.10.16
+seed phrase generator code from https://github.com/dor133/seed-phrase-generator

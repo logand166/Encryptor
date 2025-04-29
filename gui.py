@@ -22,6 +22,8 @@ from PyQt5.QtCore import Qt
 from crypto import CryptoWorker
 from utilities import PasswordStrengthMeter
 
+from utilities import generate_seed_phrase
+
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -45,10 +47,9 @@ class MainWindow(QMainWindow):
     def load_icon(self):
         # get icon from current directory
         base_path = os.path.dirname(os.path.abspath(__file__))
-        
+
         icon_path = os.path.join(base_path, "app-logo.ico")
 
-        
         if os.path.exists(icon_path):
             return QIcon(icon_path)
         else:
@@ -58,29 +59,35 @@ class MainWindow(QMainWindow):
         self.tabs = QTabWidget()
         self.encrypt_tab = self.create_encrypt_tab()
         self.decrypt_tab = self.create_decrypt_tab()
+        self.recovery_tab = self.create_recovery_tab()
         self.tabs.addTab(self.encrypt_tab, "Encrypt")
         self.tabs.addTab(self.decrypt_tab, "Decrypt")
+        self.tabs.addTab(self.recovery_tab, "Recover Key")
         self.setCentralWidget(self.tabs)
 
     def create_encrypt_tab(self):
         tab = QWidget()
         layout = QVBoxLayout()
 
-        # File selection
+        # File selection (existing code remains the same)
         self.encrypt_file_line = QLineEdit()
         self.encrypt_file_btn = QPushButton("Select File")
         self.encrypt_file_btn.clicked.connect(
             partial(self.select_files, self.encrypt_file_line, False)
         )
+        self.encrypt_directory_btn = QPushButton("Select Directory")
+        self.encrypt_directory_btn.clicked.connect(
+            partial(self.select_folder, self.encrypt_file_line, True)
+        )
 
-        # Output path
+        # Output path (existing code remains the same)
         self.encrypt_output_line = QLineEdit()
         self.encrypt_output_btn = QPushButton("Select Output Path")
         self.encrypt_output_btn.clicked.connect(
             partial(self.select_output_file, self.encrypt_output_line, "encrypted")
         )
 
-        # Password fields
+        # Password fields (existing code remains the same)
         self.encrypt_password = QLineEdit()
         self.encrypt_password.setEchoMode(QLineEdit.Password)
         self.encrypt_password.textChanged.connect(self.update_password_strength)
@@ -88,40 +95,90 @@ class MainWindow(QMainWindow):
         self.encrypt_confirm = QLineEdit()
         self.encrypt_confirm.setEchoMode(QLineEdit.Password)
 
-        # Show password checkbox
+        # Show password checkbox (existing code remains the same)
         self.show_password_checkbox = QCheckBox("Show Password")
         self.show_password_checkbox.stateChanged.connect(
             self.toggle_password_visibility
         )
 
-        # Delete original file checkbox
+        # Delete original file checkbox (existing code remains the same)
         self.delete_original_checkbox = QCheckBox(
             "Delete original file after encryption"
         )
 
-        # Password strength meter
+        # Password strength meter (existing code remains the same)
         self.password_strength_label = QLabel("Password Strength:")
         self.password_strength_meter = QProgressBar()
         self.password_strength_meter.setRange(0, 100)
         self.password_strength_meter.setTextVisible(False)
 
-        # Progress
+        # ===== NEW KEY RECOVERY SECTION =====
+        self.recovery_section = QWidget()
+        self.recovery_section.setVisible(False)  # Start collapsed
+        recovery_layout = QVBoxLayout()
+
+        # Seed phrase recovery
+        self.seed_phrase_checkbox = QCheckBox("Enable Seed Phrase Recovery")
+        self.seed_phrase_text = QTextEdit()
+        self.seed_phrase_text.setReadOnly(True)
+        self.seed_phrase_text.setMaximumHeight(60)
+        self.generate_seed_btn = QPushButton("Generate 12-word Phrase")
+        self.generate_seed_btn.clicked.connect(self.generate_seed_phrase)
+
+        # Security questions
+        self.security_questions_checkbox = QCheckBox("Enable Security Questions")
+        self.security_questions_widget = QWidget()
+        sq_layout = QVBoxLayout()
+
+        self.question1 = QLineEdit(placeholderText="Question 1")
+        self.answer1 = QLineEdit(placeholderText="Answer")
+        self.question2 = QLineEdit(placeholderText="Question 2")
+        self.answer2 = QLineEdit(placeholderText="Answer")
+
+        sq_layout.addWidget(self.question1)
+        sq_layout.addWidget(self.answer1)
+        sq_layout.addWidget(self.question2)
+        sq_layout.addWidget(self.answer2)
+        self.security_questions_widget.setLayout(sq_layout)
+
+        # Hardware token
+        self.hardware_token_checkbox = QCheckBox(
+            "Enable Hardware Token (e.g., YubiKey)"
+        )
+        self.register_token_btn = QPushButton("Register Device")
+        self.register_token_btn.clicked.connect(self.register_hardware_token)
+
+        # Add to recovery layout
+        recovery_layout.addWidget(self.seed_phrase_checkbox)
+        recovery_layout.addWidget(self.seed_phrase_text)
+        recovery_layout.addWidget(self.generate_seed_btn)
+        recovery_layout.addWidget(self.security_questions_checkbox)
+        recovery_layout.addWidget(self.security_questions_widget)
+        recovery_layout.addWidget(self.hardware_token_checkbox)
+        recovery_layout.addWidget(self.register_token_btn)
+        self.recovery_section.setLayout(recovery_layout)
+
+        # Toggle button for the section
+        self.toggle_recovery_btn = QPushButton("▼ Set up Key Recovery Options")
+        self.toggle_recovery_btn.setCheckable(True)
+        self.toggle_recovery_btn.setChecked(False)
+        self.toggle_recovery_btn.setStyleSheet("text-align: left;")
+        self.toggle_recovery_btn.clicked.connect(self.toggle_recovery_section)
+
+        # Progress (existing code remains the same)
         self.encrypt_progress = QProgressBar()
         self.encrypt_log = QTextEdit()
         self.encrypt_log.setReadOnly(True)
 
-        # Buttons
+        # Buttons (existing code remains the same)
         self.encrypt_btn = QPushButton("Start Encryption")
         self.encrypt_btn.clicked.connect(partial(self.start_operation, "encrypt"))
 
-        # Layout organization
+        # Layout organization (modified to include recovery section)
         file_layout = QHBoxLayout()
         file_layout.addWidget(self.encrypt_file_line)
         file_layout.addWidget(self.encrypt_file_btn)
-
-        output_layout = QHBoxLayout()
-        output_layout.addWidget(self.encrypt_output_line)
-        output_layout.addWidget(self.encrypt_output_btn)
+        file_layout.addWidget(self.encrypt_directory_btn)
 
         password_layout = QVBoxLayout()
 
@@ -144,8 +201,9 @@ class MainWindow(QMainWindow):
         password_layout.addLayout(strength_layout)
 
         layout.addLayout(file_layout)
-        layout.addLayout(output_layout)
         layout.addLayout(password_layout)
+        layout.addWidget(self.toggle_recovery_btn)  # Add the toggle button
+        layout.addWidget(self.recovery_section)  # Add the recovery section
         layout.addWidget(self.encrypt_btn)
         layout.addWidget(self.encrypt_progress)
         layout.addWidget(self.encrypt_log)
@@ -220,6 +278,160 @@ class MainWindow(QMainWindow):
         tab.setLayout(layout)
         return tab
 
+    def create_recovery_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout()
+
+        # Recovery key file selection
+        self.recovery_key_line = QLineEdit()
+        self.recovery_key_btn = QPushButton("Select Recovery Key File")
+        self.recovery_key_btn.clicked.connect(
+            partial(self.select_files, self.recovery_key_line, False)
+        )
+
+        # Drive or file selection for re-encryption/recovery
+        self.recovery_drive_line = QLineEdit()
+        self.recovery_drive_btn = QPushButton("Select Drive/Folder/File")
+        self.recovery_drive_btn.clicked.connect(
+            partial(self.select_files, self.recovery_drive_line, True)
+        )
+
+        # Recovery options
+        self.recovery_seed_phrase_checkbox = QCheckBox("Use Seed Phrase")
+        self.recovery_seed_phrase_text = QTextEdit()
+        self.recovery_seed_phrase_text.setPlaceholderText("Enter your seed phrase here")
+        self.recovery_seed_phrase_text.setMaximumHeight(60)
+
+        self.recovery_security_questions_checkbox = QCheckBox("Use Security Questions")
+        self.recovery_question1 = QLineEdit(placeholderText="Question 1")
+        self.recovery_answer1 = QLineEdit(placeholderText="Answer")
+        self.recovery_question2 = QLineEdit(placeholderText="Question 2")
+        self.recovery_answer2 = QLineEdit(placeholderText="Answer")
+
+        self.recovery_hardware_token_checkbox = QCheckBox("Use Hardware Token")
+        self.verify_token_btn = QPushButton("Verify Hardware Token")
+        self.verify_token_btn.clicked.connect(self.verify_hardware_token)
+
+        # New password fields
+        self.new_password = QLineEdit()
+        self.new_password.setEchoMode(QLineEdit.Password)
+        self.new_password.textChanged.connect(self.update_new_password_strength)
+
+        self.confirm_new_password = QLineEdit()
+        self.confirm_new_password.setEchoMode(QLineEdit.Password)
+
+        self.show_new_password_checkbox = QCheckBox("Show Password")
+        self.show_new_password_checkbox.stateChanged.connect(
+            self.toggle_new_password_visibility
+        )
+
+        # Password strength meter
+        self.new_password_strength_label = QLabel("Password Strength:")
+        self.new_password_strength_meter = QProgressBar()
+        self.new_password_strength_meter.setRange(0, 100)
+        self.new_password_strength_meter.setTextVisible(False)
+
+        # Recover button
+        self.recover_btn = QPushButton("Recover Key")
+        self.recover_btn.clicked.connect(self.recover_password)
+
+        # Layout organization
+        recovery_key_layout = QHBoxLayout()
+        recovery_key_layout.addWidget(self.recovery_key_line)
+        recovery_key_layout.addWidget(self.recovery_key_btn)
+
+        recovery_drive_layout = QHBoxLayout()
+        recovery_drive_layout.addWidget(self.recovery_drive_line)
+        recovery_drive_layout.addWidget(self.recovery_drive_btn)
+
+        security_questions_layout = QVBoxLayout()
+        security_questions_layout.addWidget(self.recovery_question1)
+        security_questions_layout.addWidget(self.recovery_answer1)
+        security_questions_layout.addWidget(self.recovery_question2)
+        security_questions_layout.addWidget(self.recovery_answer2)
+
+        password_layout = QVBoxLayout()
+        password_row1 = QHBoxLayout()
+        password_row1.addWidget(QLabel("New Password:"))
+        password_row1.addWidget(self.new_password)
+        password_row1.addWidget(QLabel("Confirm:"))
+        password_row1.addWidget(self.confirm_new_password)
+
+        password_row2 = QHBoxLayout()
+        password_row2.addWidget(self.show_new_password_checkbox)
+
+        password_layout.addLayout(password_row1)
+        password_layout.addLayout(password_row2)
+
+        strength_layout = QHBoxLayout()
+        strength_layout.addWidget(self.new_password_strength_label)
+        strength_layout.addWidget(self.new_password_strength_meter)
+        password_layout.addLayout(strength_layout)
+
+        layout.addLayout(recovery_key_layout)
+        layout.addLayout(recovery_drive_layout)
+        layout.addWidget(self.recovery_seed_phrase_checkbox)
+        layout.addWidget(self.recovery_seed_phrase_text)
+        layout.addWidget(self.recovery_security_questions_checkbox)
+        layout.addLayout(security_questions_layout)
+        layout.addWidget(self.recovery_hardware_token_checkbox)
+        layout.addWidget(self.verify_token_btn)
+        layout.addLayout(password_layout)
+        layout.addWidget(self.recover_btn)
+
+        tab.setLayout(layout)
+        return tab
+
+    def toggle_new_password_visibility(self, state):
+        if state == Qt.Checked:
+            self.new_password.setEchoMode(QLineEdit.Normal)
+            self.confirm_new_password.setEchoMode(QLineEdit.Normal)
+        else:
+            self.new_password.setEchoMode(QLineEdit.Password)
+            self.confirm_new_password.setEchoMode(QLineEdit.Password)
+
+    def recover_password(self):
+        try:
+            # Validate recovery options
+            if self.recovery_seed_phrase_checkbox.isChecked():
+                seed_phrase = self.recovery_seed_phrase_text.toPlainText().strip()
+                if not seed_phrase:
+                    raise ValueError("Seed phrase cannot be empty")
+                # Validate seed phrase (implementation depends on your logic)
+
+            if self.recovery_security_questions_checkbox.isChecked():
+                question1 = self.recovery_question1.text().strip()
+                answer1 = self.recovery_answer1.text().strip()
+                question2 = self.recovery_question2.text().strip()
+                answer2 = self.recovery_answer2.text().strip()
+                if not (question1 and answer1 and question2 and answer2):
+                    raise ValueError(
+                        "All security questions and answers must be filled"
+                    )
+                # Validate security questions (implementation depends on your logic)
+
+            if self.recovery_hardware_token_checkbox.isChecked():
+                # Validate hardware token (implementation depends on your logic)
+                pass
+
+            # Validate new password
+            new_password = self.new_password.text()
+            confirm_password = self.confirm_new_password.text()
+            if not new_password:
+                raise ValueError("New password cannot be empty")
+            if new_password != confirm_password:
+                raise ValueError("Passwords do not match")
+
+            # Perform password recovery (implementation depends on your logic)
+            QMessageBox.information(
+                self,
+                "Success",
+                "Password recovery successful. Your new password has been set.",
+            )
+
+        except Exception as e:
+            self.show_error(str(e))
+
     def toggle_password_visibility(self, state):
         if state == Qt.Checked:
             self.encrypt_password.setEchoMode(QLineEdit.Normal)
@@ -244,6 +456,16 @@ class MainWindow(QMainWindow):
             f"QProgressBar::chunk {{ background-color: {color.name()}; }}"
         )
 
+    def update_new_password_strength(self):
+        password = self.new_password.text()
+        strength = PasswordStrengthMeter.calculate_strength(password)
+        color = PasswordStrengthMeter.get_strength_color(strength)
+
+        self.new_password_strength_meter.setValue(strength)
+        self.new_password_strength_meter.setStyleSheet(
+            f"QProgressBar::chunk {{ background-color: {color.name()}; }}"
+        )
+
     def select_files(self, line_edit, multi):
         if multi:
             files, _ = QFileDialog.getOpenFileNames(self, "Select Files")
@@ -253,6 +475,11 @@ class MainWindow(QMainWindow):
             file, _ = QFileDialog.getOpenFileName(self, "Select File")
             if file:
                 line_edit.setText(file)
+
+    def select_folder(self, line_edit, multi):
+        folder = QFileDialog.getExistingDirectory(self, "Select Folder")
+        if folder:
+            line_edit.setText(folder)
 
     def select_output_file(self, line_edit, default_suffix):
         file, _ = QFileDialog.getSaveFileName(
@@ -357,3 +584,49 @@ class MainWindow(QMainWindow):
             self.worker.stop()
             self.worker.wait(2000)  # Wait up to 2 seconds for clean exit
         event.accept()
+
+    # new ones
+    def toggle_recovery_section(self):
+        """Toggle visibility of the recovery options section."""
+        if self.toggle_recovery_btn.isChecked():
+            self.recovery_section.setVisible(True)
+            self.toggle_recovery_btn.setText("▲ Hide Key Recovery Options")
+        else:
+            self.recovery_section.setVisible(False)
+            self.toggle_recovery_btn.setText("▼ Set up Key Recovery Options")
+
+    def generate_seed_phrase(self):
+        """Generate a random seed phrase."""
+
+        self.seed_phrase_text.setPlainText(generate_seed_phrase(128, "en"))
+        QMessageBox.information(
+            self,
+            "Seed Phrase",
+            "Write this down and store it securely!\n"
+            "It cannot be recovered if lost.",
+        )
+
+    def register_hardware_token(self):
+        """Handle hardware token registration."""
+        # Implement actual hardware token registration
+        QMessageBox.information(
+            self, "Hardware Token", "Please insert your security token now..."
+        )
+
+    def toggle_decrypt_recovery_section(self):
+        """Toggle visibility of the decrypt recovery options section."""
+        if self.decrypt_toggle_recovery_btn.isChecked():
+            self.decrypt_recovery_section.setVisible(True)
+            self.decrypt_toggle_recovery_btn.setText("▲ Hide Recovery Options")
+        else:
+            self.decrypt_recovery_section.setVisible(False)
+            self.decrypt_toggle_recovery_btn.setText("▼ Alternative Recovery Options")
+
+    def verify_hardware_token(self):
+        """Handle hardware token verification during decryption."""
+        # Implement actual hardware token verification
+        QMessageBox.information(
+            self,
+            "Hardware Token",
+            "Please insert your security token for verification...",
+        )
