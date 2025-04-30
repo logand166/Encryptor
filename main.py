@@ -22,9 +22,9 @@ from qt_material import apply_stylesheet
 
 if __name__ == "__main__":
     QCoreApplication.setAttribute(Qt.AA_DisableWindowContextHelpButton)
-    app = QApplication(sys.argv)
+    app: QApplication = QApplication(sys.argv)
 
     apply_stylesheet(app, theme="dark_blue.xml")
-    window = MainWindow()
+    window: MainWindow = MainWindow()
     window.show()
     sys.exit(app.exec_())

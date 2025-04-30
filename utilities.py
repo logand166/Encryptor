@@ -24,7 +24,7 @@ LENGTH_STRENGTH = dict(zip(LENGTHS, STRENGTHS))
 
 class PasswordStrengthMeter:
     @staticmethod
-    def calculate_strength(password):
+    def calculate_strength(password: str) -> int:
         if not password:
             return 0
 
@@ -54,7 +54,7 @@ class PasswordStrengthMeter:
         return int((strength / max_possible) * 100)
 
     @staticmethod
-    def get_strength_color(strength):
+    def get_strength_color(strength: int) -> QColor:
         if strength < 30:
             return QColor(255, 0, 0)  # Red
         elif strength < 70:
@@ -68,7 +68,21 @@ def strength(length: int) -> int:
     return strength
 
 
-def generate_seed_phrase(strength: int, lang: str) -> str:
+def generate_seed_phrase(strength: int = 128, lang: str = "en") -> str:
+    """Generate a seed phrase using the Mnemonic library.
+    The seed phrase is generated based on the specified strength and language.
+
+    Args:
+        strength (int): The strength of the seed phrase. It should be one of the following values:
+            128, 160, 192, 224, or 256.
+            The default is 128.
+        lang (str): The language for the seed phrase. It should be one of the following values:
+            "en", "zh", "zh2", "fr", "it", "ja", "ko", or "es".
+        The default is "en" (English).
+
+    Returns:
+        str: The generated seed phrase.
+    """
     mnemo = Mnemonic(LANGUAGES[lang])
 
     seed_phrase = mnemo.generate(strength=strength)

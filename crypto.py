@@ -257,15 +257,15 @@ class CryptoWorker(QThread):
 
 
 class DriveCrypto:
-    def __init__(self, drive_path, delete_original):
+    def __init__(self, drive_path: str, delete_original: bool = False):
         self.drive_path = drive_path
         self.crypto_worker = None
-        self.directory_structure = {}
-        self.file_structure = {}
+        self.directory_structure: dict = {}
+        self.file_structure: dict = {}
         self.get_directory_structure()
-        self.delete_original = delete_original
+        self.delete_original: bool = delete_original
 
-    def get_directory_structure(self):
+    def get_directory_structure(self) -> tuple:
         """Get the directory structure of the drive"""
         for root, dirs, files in os.walk(self.drive_path):
             relative_path = os.path.relpath(root, self.drive_path)
@@ -277,14 +277,14 @@ class DriveCrypto:
                 )
         return self.directory_structure, self.file_structure
 
-    def get_file_size(self, file_path):
+    def get_file_size(self, file_path: str) -> str:
         """Get the size of a file"""
         if file_path in self.file_structure:
             return self.file_structure[file_path]
         else:
             raise FileNotFoundError(f"File not found: {file_path}")
 
-    def encrypt(self, password):
+    def encrypt(self, password: str) -> None:
         """
         Encrypt the files in the drive while preserving the directory structure
         and then also delete the original files
@@ -302,7 +302,7 @@ class DriveCrypto:
                 self.crypto_worker.run()
                 print(f"Encrypted {file_path} to {dest_path}")
 
-    def decrypt(self, password):
+    def decrypt(self, password: str) -> None:
         """
         Decrypt the files in the drive while preserving the directory structure
         and then also delete the original files
@@ -320,7 +320,7 @@ class DriveCrypto:
                 self.crypto_worker.run()
                 print(f"Decrypted {file_path} to {dest_path}")
 
-    def visualize_directory_structure(self):
+    def visualize_directory_structure(self) -> tuple:
         """Visualize the directory structure"""
         for dir_path, dirs in self.directory_structure.items():
             print(f"Directory: {dir_path}")
@@ -328,23 +328,25 @@ class DriveCrypto:
                 if os.path.dirname(file_path) == dir_path:
                     print(f"  File: {os.path.basename(file_path)} - Size: {size} bytes")
         return self.directory_structure, self.file_structure
-    
-    def visualize_directory_structure_as_string(self):
+
+    def visualize_directory_structure_as_string(self) -> str:
         """Visualize the directory structure as a string"""
         structure_str = ""
         for dir_path, dirs in self.directory_structure.items():
             structure_str += f"Directory: {dir_path}\n"
             for file_path, size in self.file_structure.items():
                 if os.path.dirname(file_path) == dir_path:
-                    structure_str += f"  File: {os.path.basename(file_path)} - Size: {size} bytes\n"
+                    structure_str += (
+                        f"  File: {os.path.basename(file_path)} - Size: {size} bytes\n"
+                    )
         return structure_str
 
 
 class PasswordRecovery:
-    def __init__(self, drive_path, key):
-        self.drive_path = drive_path
-        self.key = key
-        self.recovery_key = None
+    def __init__(self, drive_path: str, key: str = None):
+        self.drive_path: str = drive_path
+        self.key: str = key
+        self.recovery_key: str = None
 
         # save recovery key to a file
         key_path = os.path.join(self.drive_path, "recovery.key")
@@ -352,7 +354,7 @@ class PasswordRecovery:
             f.write(self.key)
         print(f"Recovery key saved to {key_path}")
 
-    def setup_key_recovery(self, strategy):
+    def setup_key_recovery(self, strategy: str):
         """
         Setup key recovery strategy
         """
@@ -362,7 +364,7 @@ class PasswordRecovery:
         else:
             raise ValueError("Invalid recovery strategy")
 
-    def get_recovery_key(self, strategy, recovery_key_items: dict):
+    def get_recovery_key(self, strategy:str, recovery_key_items: dict) -> str:
         """
         Get the recovery key
         """
@@ -377,7 +379,7 @@ class PasswordRecovery:
 
         return self.recovery_key
 
-    def encrypt_recovery_key(self):
+    def encrypt_recovery_key(self) -> None:
         """
         Encrypt the recovery.key file using only the recovery key
         """
@@ -397,7 +399,7 @@ class PasswordRecovery:
 
         print("Recovery key encrypted and saved to encrypted_recovery.key")
 
-    def decrypt_recovery_key(self, password):
+    def decrypt_recovery_key(self, password: str) -> None:
         """
         Decrypt the recovery.key file using the provided password
         """
@@ -414,7 +416,3 @@ class PasswordRecovery:
         self.crypto_worker.set_delete_original(True)
         self.crypto_worker.run()
         print(f"Decrypted {file_path} to {dest_path}")
-
-
-if __name__ == "__main__":
-    pass
