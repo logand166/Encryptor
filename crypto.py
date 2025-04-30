@@ -257,12 +257,13 @@ class CryptoWorker(QThread):
 
 
 class DriveCrypto:
-    def __init__(self, drive_path):
+    def __init__(self, drive_path, delete_original):
         self.drive_path = drive_path
         self.crypto_worker = None
         self.directory_structure = {}
         self.file_structure = {}
         self.get_directory_structure()
+        self.delete_original = delete_original
 
     def get_directory_structure(self):
         """Get the directory structure of the drive"""
@@ -293,11 +294,11 @@ class DriveCrypto:
             if not file_path.endswith(".enc"):
                 print(f"Encrypting {file_path}")
                 src_path = os.path.join(self.drive_path, file_path)
-                dest_path = os.path.join(self.drive_path, f"{file_path}.enc")
+                dest_path = os.path.join(self.drive_path, f"{file_path}.encrypted")
                 self.crypto_worker = CryptoWorker(
                     "encrypt", src_path, dest_path, password
                 )
-                self.crypto_worker.set_delete_original(True)
+                self.crypto_worker.set_delete_original(self.delete_original)
                 self.crypto_worker.run()
                 print(f"Encrypted {file_path} to {dest_path}")
 
@@ -308,14 +309,14 @@ class DriveCrypto:
         """
 
         for file_path, size in self.file_structure.items():
-            if file_path.endswith(".enc"):
+            if file_path.endswith(".encrypted"):
                 print(f"Decrypting {file_path}")
                 src_path = os.path.join(self.drive_path, file_path)
-                dest_path = os.path.join(self.drive_path, file_path[:-4])
+                dest_path = os.path.join(self.drive_path, file_path[:-10])
                 self.crypto_worker = CryptoWorker(
                     "decrypt", src_path, dest_path, password
                 )
-                self.crypto_worker.set_delete_original(True)
+                self.crypto_worker.set_delete_original(self.delete_original)
                 self.crypto_worker.run()
                 print(f"Decrypted {file_path} to {dest_path}")
 
@@ -327,6 +328,16 @@ class DriveCrypto:
                 if os.path.dirname(file_path) == dir_path:
                     print(f"  File: {os.path.basename(file_path)} - Size: {size} bytes")
         return self.directory_structure, self.file_structure
+    
+    def visualize_directory_structure_as_string(self):
+        """Visualize the directory structure as a string"""
+        structure_str = ""
+        for dir_path, dirs in self.directory_structure.items():
+            structure_str += f"Directory: {dir_path}\n"
+            for file_path, size in self.file_structure.items():
+                if os.path.dirname(file_path) == dir_path:
+                    structure_str += f"  File: {os.path.basename(file_path)} - Size: {size} bytes\n"
+        return structure_str
 
 
 class PasswordRecovery:
@@ -334,13 +345,13 @@ class PasswordRecovery:
         self.drive_path = drive_path
         self.key = key
         self.recovery_key = None
-        
+
         # save recovery key to a file
         key_path = os.path.join(self.drive_path, "recovery.key")
         with open(key_path, "w") as f:
             f.write(self.key)
         print(f"Recovery key saved to {key_path}")
-    
+
     def setup_key_recovery(self, strategy):
         """
         Setup key recovery strategy
@@ -350,12 +361,12 @@ class PasswordRecovery:
             self.recovery_key = generate_seed_phrase(256, "en")
         else:
             raise ValueError("Invalid recovery strategy")
-    
+
     def get_recovery_key(self, strategy, recovery_key_items: dict):
         """
         Get the recovery key
         """
-        
+
         if strategy == "seed_phrase":
             self.recovery_key = recovery_key_items.get("seed_phrase")
         else:
@@ -370,7 +381,7 @@ class PasswordRecovery:
         """
         Encrypt the recovery.key file using only the recovery key
         """
-        
+
         if not self.recovery_key:
             raise ValueError("Recovery key not set up")
 
@@ -383,28 +394,27 @@ class PasswordRecovery:
             os.path.join(self.drive_path, "recovery.key"),
             self.recovery_key,
         )
-        
+
         print("Recovery key encrypted and saved to encrypted_recovery.key")
-        
+
     def decrypt_recovery_key(self, password):
         """
         Decrypt the recovery.key file using the provided password
         """
-        
+
         if not self.recovery_key:
             raise ValueError("Recovery key not set up")
 
         file_path = os.path.join(self.drive_path, "recovery.key")
-        
+
         print(f"Decrypting {file_path}")
         src_path = os.path.join(self.drive_path, file_path)
         dest_path = os.path.join(self.drive_path, file_path[:-4])
-        self.crypto_worker = CryptoWorker(
-            "decrypt", src_path, dest_path, password
-        )
+        self.crypto_worker = CryptoWorker("decrypt", src_path, dest_path, password)
         self.crypto_worker.set_delete_original(True)
         self.crypto_worker.run()
         print(f"Decrypted {file_path} to {dest_path}")
+
 
 if __name__ == "__main__":
     pass

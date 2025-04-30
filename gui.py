@@ -13,22 +13,26 @@ from PyQt5.QtWidgets import (
     QProgressBar,
     QMessageBox,
     QCheckBox,
+    QRadioButton,
+    QComboBox,
 )
 from PyQt5.QtGui import QIcon, QFontDatabase
 import sys
 import os
 from PyQt5.QtCore import Qt
 
-from crypto import CryptoWorker
+from crypto import CryptoWorker, DriveCrypto
 from utilities import PasswordStrengthMeter
 
 from utilities import generate_seed_phrase
+
+from qt_material import apply_stylesheet
 
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-
+        
         self.setWindowTitle("Secure File Cryptor")
         self.setGeometry(100, 100, 800, 600)
         self.setWindowIcon(self.load_icon())
@@ -43,6 +47,7 @@ class MainWindow(QMainWindow):
         self.init_ui()
         self.worker = None
         self.current_operation = None
+        self.encrypt_type = None
 
     def load_icon(self):
         # get icon from current directory
@@ -54,6 +59,37 @@ class MainWindow(QMainWindow):
             return QIcon(icon_path)
         else:
             return QIcon()
+
+    def load_security_questions(self):
+        # Load security questions from a file or database
+        # For simplicity, we will use hardcoded questions
+        self.security_questions = []
+
+        # load from security_questions.txt
+        try:
+            with open("security_questions.txt", "r") as f:
+                self.security_questions = [line.strip() for line in f.readlines()]
+        except FileNotFoundError:
+            QMessageBox.warning(
+                self,
+                "Error",
+                "Security questions file not found. Please create a file named 'security_questions.txt' with your questions.",
+            )
+            return
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"An error occurred while loading security questions: {str(e)}",
+            )
+            return
+        if len(self.security_questions) < 2:
+            QMessageBox.warning(
+                self,
+                "Error",
+                "Please provide at least two security questions in the 'security_questions.txt' file.",
+            )
+            return
 
     def init_ui(self):
         self.tabs = QTabWidget()
@@ -78,13 +114,6 @@ class MainWindow(QMainWindow):
         self.encrypt_directory_btn = QPushButton("Select Directory")
         self.encrypt_directory_btn.clicked.connect(
             partial(self.select_folder, self.encrypt_file_line, True)
-        )
-
-        # Output path (existing code remains the same)
-        self.encrypt_output_line = QLineEdit()
-        self.encrypt_output_btn = QPushButton("Select Output Path")
-        self.encrypt_output_btn.clicked.connect(
-            partial(self.select_output_file, self.encrypt_output_line, "encrypted")
         )
 
         # Password fields (existing code remains the same)
@@ -118,7 +147,7 @@ class MainWindow(QMainWindow):
         recovery_layout = QVBoxLayout()
 
         # Seed phrase recovery
-        self.seed_phrase_checkbox = QCheckBox("Enable Seed Phrase Recovery")
+        self.seed_phrase_radio_btn = QRadioButton("Enable Seed Phrase Recovery")
         self.seed_phrase_text = QTextEdit()
         self.seed_phrase_text.setReadOnly(True)
         self.seed_phrase_text.setMaximumHeight(60)
@@ -126,14 +155,24 @@ class MainWindow(QMainWindow):
         self.generate_seed_btn.clicked.connect(self.generate_seed_phrase)
 
         # Security questions
-        self.security_questions_checkbox = QCheckBox("Enable Security Questions")
+        self.security_questions_radio_btn = QRadioButton("Enable Security Questions")
         self.security_questions_widget = QWidget()
         sq_layout = QVBoxLayout()
 
-        self.question1 = QLineEdit(placeholderText="Question 1")
-        self.answer1 = QLineEdit(placeholderText="Answer")
-        self.question2 = QLineEdit(placeholderText="Question 2")
-        self.answer2 = QLineEdit(placeholderText="Answer")
+        self.load_security_questions()
+
+        # Dropdown for selecting questions
+        self.question1 = QComboBox()
+        self.question1.addItems(self.security_questions)
+        self.answer1 = QLineEdit()
+        self.answer1.setPlaceholderText("Answer for Question 1")
+        self.answer1.setEchoMode(QLineEdit.Password)
+
+        self.question2 = QComboBox()
+        self.question2.addItems(self.security_questions)
+        self.answer2 = QLineEdit()
+        self.answer2.setPlaceholderText("Answer for Question 2")
+        self.answer2.setEchoMode(QLineEdit.Password)
 
         sq_layout.addWidget(self.question1)
         sq_layout.addWidget(self.answer1)
@@ -142,19 +181,19 @@ class MainWindow(QMainWindow):
         self.security_questions_widget.setLayout(sq_layout)
 
         # Hardware token
-        self.hardware_token_checkbox = QCheckBox(
+        self.hardware_token_radio_btn = QRadioButton(
             "Enable Hardware Token (e.g., YubiKey)"
         )
         self.register_token_btn = QPushButton("Register Device")
         self.register_token_btn.clicked.connect(self.register_hardware_token)
 
         # Add to recovery layout
-        recovery_layout.addWidget(self.seed_phrase_checkbox)
+        recovery_layout.addWidget(self.seed_phrase_radio_btn)
         recovery_layout.addWidget(self.seed_phrase_text)
         recovery_layout.addWidget(self.generate_seed_btn)
-        recovery_layout.addWidget(self.security_questions_checkbox)
+        recovery_layout.addWidget(self.security_questions_radio_btn)
         recovery_layout.addWidget(self.security_questions_widget)
-        recovery_layout.addWidget(self.hardware_token_checkbox)
+        recovery_layout.addWidget(self.hardware_token_radio_btn)
         recovery_layout.addWidget(self.register_token_btn)
         self.recovery_section.setLayout(recovery_layout)
 
@@ -222,11 +261,9 @@ class MainWindow(QMainWindow):
             partial(self.select_files, self.decrypt_file_line, False)
         )
 
-        # Output path
-        self.decrypt_output_line = QLineEdit()
-        self.decrypt_output_btn = QPushButton("Select Output Path")
-        self.decrypt_output_btn.clicked.connect(
-            partial(self.select_output_file, self.decrypt_output_line, "decrypted")
+        self.decrypt_directory_btn = QPushButton("Select Directory")
+        self.decrypt_directory_btn.clicked.connect(
+            partial(self.select_folder, self.decrypt_file_line, True)
         )
 
         # Password field
@@ -257,10 +294,7 @@ class MainWindow(QMainWindow):
         file_layout = QHBoxLayout()
         file_layout.addWidget(self.decrypt_file_line)
         file_layout.addWidget(self.decrypt_file_btn)
-
-        output_layout = QHBoxLayout()
-        output_layout.addWidget(self.decrypt_output_line)
-        output_layout.addWidget(self.decrypt_output_btn)
+        file_layout.addWidget(self.decrypt_directory_btn)
 
         password_layout = QHBoxLayout()
         password_layout.addWidget(QLabel("Password:"))
@@ -269,7 +303,6 @@ class MainWindow(QMainWindow):
         password_layout.addWidget(self.delete_original_checkbox_decrypt)
 
         layout.addLayout(file_layout)
-        layout.addLayout(output_layout)
         layout.addLayout(password_layout)
         layout.addWidget(self.decrypt_btn)
         layout.addWidget(self.decrypt_progress)
@@ -297,18 +330,20 @@ class MainWindow(QMainWindow):
         )
 
         # Recovery options
-        self.recovery_seed_phrase_checkbox = QCheckBox("Use Seed Phrase")
+        self.recovery_seed_phrase_radio_btn = QRadioButton("Use Seed Phrase")
         self.recovery_seed_phrase_text = QTextEdit()
         self.recovery_seed_phrase_text.setPlaceholderText("Enter your seed phrase here")
         self.recovery_seed_phrase_text.setMaximumHeight(60)
 
-        self.recovery_security_questions_checkbox = QCheckBox("Use Security Questions")
+        self.recovery_security_questions_radio_btn = QRadioButton(
+            "Use Security Questions"
+        )
         self.recovery_question1 = QLineEdit(placeholderText="Question 1")
         self.recovery_answer1 = QLineEdit(placeholderText="Answer")
         self.recovery_question2 = QLineEdit(placeholderText="Question 2")
         self.recovery_answer2 = QLineEdit(placeholderText="Answer")
 
-        self.recovery_hardware_token_checkbox = QCheckBox("Use Hardware Token")
+        self.recovery_hardware_token_radio_btn = QRadioButton("Use Hardware Token")
         self.verify_token_btn = QPushButton("Verify Hardware Token")
         self.verify_token_btn.clicked.connect(self.verify_hardware_token)
 
@@ -370,11 +405,11 @@ class MainWindow(QMainWindow):
 
         layout.addLayout(recovery_key_layout)
         layout.addLayout(recovery_drive_layout)
-        layout.addWidget(self.recovery_seed_phrase_checkbox)
+        layout.addWidget(self.recovery_seed_phrase_radio_btn)
         layout.addWidget(self.recovery_seed_phrase_text)
-        layout.addWidget(self.recovery_security_questions_checkbox)
+        layout.addWidget(self.recovery_security_questions_radio_btn)
         layout.addLayout(security_questions_layout)
-        layout.addWidget(self.recovery_hardware_token_checkbox)
+        layout.addWidget(self.recovery_hardware_token_radio_btn)
         layout.addWidget(self.verify_token_btn)
         layout.addLayout(password_layout)
         layout.addWidget(self.recover_btn)
@@ -393,13 +428,13 @@ class MainWindow(QMainWindow):
     def recover_password(self):
         try:
             # Validate recovery options
-            if self.recovery_seed_phrase_checkbox.isChecked():
+            if self.recovery_seed_phrase_radio_btn.isChecked():
                 seed_phrase = self.recovery_seed_phrase_text.toPlainText().strip()
                 if not seed_phrase:
                     raise ValueError("Seed phrase cannot be empty")
                 # Validate seed phrase (implementation depends on your logic)
 
-            if self.recovery_security_questions_checkbox.isChecked():
+            if self.recovery_security_questions_radio_btn.isChecked():
                 question1 = self.recovery_question1.text().strip()
                 answer1 = self.recovery_answer1.text().strip()
                 question2 = self.recovery_question2.text().strip()
@@ -410,7 +445,7 @@ class MainWindow(QMainWindow):
                     )
                 # Validate security questions (implementation depends on your logic)
 
-            if self.recovery_hardware_token_checkbox.isChecked():
+            if self.recovery_hardware_token_radio_btn.isChecked():
                 # Validate hardware token (implementation depends on your logic)
                 pass
 
@@ -476,10 +511,14 @@ class MainWindow(QMainWindow):
             if file:
                 line_edit.setText(file)
 
+        self.encrypt_type = "file" if not multi else "files"
+
     def select_folder(self, line_edit, multi):
         folder = QFileDialog.getExistingDirectory(self, "Select Folder")
         if folder:
             line_edit.setText(folder)
+
+        self.encrypt_type = "folder" if folder else None
 
     def select_output_file(self, line_edit, default_suffix):
         file, _ = QFileDialog.getSaveFileName(
@@ -488,30 +527,88 @@ class MainWindow(QMainWindow):
         if file:
             line_edit.setText(file)
 
+    def folder_operation(self, driveCrypto: DriveCrypto, operation):
+        if operation == "encrypt":
+            self.encrypt_log.append(
+                driveCrypto.visualize_directory_structure_as_string()
+            )
+            self.encrypt_log.append(
+                f"Starting encryption of folder: {self.encrypt_file_line.text()}..."
+            )
+            self.encrypt_log.append(
+                f"Encrypted files will be saved in: {self.encrypt_file_line.text()}"
+            )
+            driveCrypto.encrypt(self.encrypt_password.text())
+            self.encrypt_log.append(
+                f"Encryption of folder {self.encrypt_file_line.text()} completed."
+            )
+        elif operation == "decrypt":
+            self.decrypt_log.append(
+                driveCrypto.visualize_directory_structure_as_string()
+            )
+            self.decrypt_log.append(
+                f"Starting decryption of folder: {self.decrypt_file_line.text()}..."
+            )
+            self.decrypt_log.append(
+                f"Decrypted files will be saved in: {self.decrypt_file_line.text()}"
+            )
+            driveCrypto.decrypt(self.decrypt_password.text())
+            self.decrypt_log.append(
+                f"Decryption of folder {self.decrypt_file_line.text()} completed."
+            )
+
     def start_operation(self, operation):
+        
         if self.worker and self.worker.isRunning():
             QMessageBox.warning(self, "Warning", "Another operation is in progress")
             return
 
+        if self.encrypt_type is None:
+            QMessageBox.information(
+                self, "Info", "Please select a file or folder to encrypt"
+            )
+            return
+
         try:
+            if self.encrypt_type == "folder":
+                driveCrypto = DriveCrypto(
+                    (
+                        self.encrypt_file_line.text()
+                        if operation == "encrypt"
+                        else self.decrypt_file_line.text()
+                    ),
+                    self.delete_original_checkbox.isChecked(),
+                )
+
+                if operation == "encrypt":
+                    driveCrypto = DriveCrypto(
+                        self.encrypt_file_line.text(),
+                        self.delete_original_checkbox.isChecked(),
+                    )
+                elif operation == "decrypt":
+                    driveCrypto = DriveCrypto(
+                        self.decrypt_file_line.text(),
+                        self.delete_original_checkbox_decrypt.isChecked(),
+                    )
+
+                self.folder_operation(driveCrypto, operation)
+                return
+
             if operation == "encrypt":
                 file_path = self.encrypt_file_line.text()
-                output_path = self.encrypt_output_line.text()
                 password = self.encrypt_password.text()
                 confirm = self.encrypt_confirm.text()
 
+                output_path = self.encrypt_file_line.text() + ".enc"
+
                 if not file_path:
                     raise ValueError("Please select a file to encrypt")
-                if not output_path:
-                    raise ValueError("Please select output path")
+                # if not output_path:
+                #     raise ValueError("Please select output path")
                 if password != confirm:
                     raise ValueError("Passwords do not match")
                 if not password:
                     raise ValueError("Password cannot be empty")
-
-                # Add .encrypted extension if not present
-                if not output_path.endswith(".encrypted"):
-                    output_path += ".encrypted"
 
                 self.worker = CryptoWorker(operation, file_path, output_path, password)
                 self.worker.set_delete_original(
@@ -521,8 +618,9 @@ class MainWindow(QMainWindow):
 
             elif operation == "decrypt":
                 file_path = self.decrypt_file_line.text()
-                output_path = self.decrypt_output_line.text()
                 password = self.decrypt_password.text()
+
+                output_path = self.decrypt_file_line.text() + ".dec"
 
                 if not file_path:
                     raise ValueError("Please select a file to decrypt")
@@ -585,7 +683,6 @@ class MainWindow(QMainWindow):
             self.worker.wait(2000)  # Wait up to 2 seconds for clean exit
         event.accept()
 
-    # new ones
     def toggle_recovery_section(self):
         """Toggle visibility of the recovery options section."""
         if self.toggle_recovery_btn.isChecked():
