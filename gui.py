@@ -412,8 +412,10 @@ class MainWindow(QMainWindow):
             self.load_security_questions_for_recovery
         )
         self.recovery_question1 = QLineEdit(placeholderText="Question 1")
+        self.recovery_question1.setReadOnly(True)
         self.recovery_answer1 = QLineEdit(placeholderText="Answer")
         self.recovery_question2 = QLineEdit(placeholderText="Question 2")
+        self.recovery_question1.setReadOnly(True)
         self.recovery_answer2 = QLineEdit(placeholderText="Answer")
 
         self.recovery_hardware_token_radio_btn = QRadioButton("Use Hardware Token")
