@@ -258,6 +258,12 @@ class CryptoWorker(QThread):
 
 class DriveCrypto:
     def __init__(self, drive_path: str, delete_original: bool = False):
+        # Check if the path is a directory
+        if not os.path.isdir(drive_path):
+            raise ValueError(f"Invalid drive path: {drive_path}")
+        # Check if the path is a file
+        if os.path.isfile(drive_path):
+            raise ValueError(f"Invalid drive path: {drive_path}")
         self.drive_path = drive_path
         self.crypto_worker = None
         self.directory_structure: dict = {}
@@ -294,7 +300,7 @@ class DriveCrypto:
             if not file_path.endswith(".enc"):
                 print(f"Encrypting {file_path}")
                 src_path = os.path.join(self.drive_path, file_path)
-                dest_path = os.path.join(self.drive_path, f"{file_path}.encrypted")
+                dest_path = os.path.join(self.drive_path, f"{file_path}.enc")
                 self.crypto_worker = CryptoWorker(
                     "encrypt", src_path, dest_path, password
                 )
@@ -309,10 +315,10 @@ class DriveCrypto:
         """
 
         for file_path, size in self.file_structure.items():
-            if file_path.endswith(".encrypted"):
+            if file_path.endswith(".enc"):
                 print(f"Decrypting {file_path}")
                 src_path = os.path.join(self.drive_path, file_path)
-                dest_path = os.path.join(self.drive_path, file_path[:-10])
+                dest_path = os.path.join(self.drive_path, file_path[:-4])
                 self.crypto_worker = CryptoWorker(
                     "decrypt", src_path, dest_path, password
                 )
@@ -344,75 +350,77 @@ class DriveCrypto:
 
 class PasswordRecovery:
     def __init__(self, drive_path: str, key: str = None):
+        if not os.path.isdir(drive_path):
+            drive_path = os.path.dirname(drive_path)
         self.drive_path: str = drive_path
         self.key: str = key
         self.recovery_key: str = None
 
-        # save recovery key to a file
-        key_path = os.path.join(self.drive_path, "recovery.key")
-        with open(key_path, "w") as f:
-            f.write(self.key)
-        print(f"Recovery key saved to {key_path}")
-
-    def setup_key_recovery(self, strategy: str):
+    def setup_key_recovery(
+        self, strategy: str, recovery_key: str, additional_info: dict = {}
+    ) -> None:
         """
         Setup key recovery strategy
         """
 
-        if strategy == "seed_phrase":
-            self.recovery_key = generate_seed_phrase(256, "en")
-        else:
-            raise ValueError("Invalid recovery strategy")
+        if strategy == "seed_phrase" or strategy == "hardware_token":
+            self.recovery_key = recovery_key
+        elif strategy == "security_questions":
+            self.recovery_key = recovery_key
 
-    def get_recovery_key(self, strategy:str, recovery_key_items: dict) -> str:
-        """
-        Get the recovery key
-        """
+            # save the questions in a security_questions.txt
+            if strategy == "security_questions":
+                questions_path = os.path.join(self.drive_path, "security.questions")
+                with open(questions_path, "w") as f:
+                    for question in additional_info.items():
+                        f.write(f"{question}\n")
+                print(f"Security questions saved to {questions_path}")
 
-        if strategy == "seed_phrase":
-            self.recovery_key = recovery_key_items.get("seed_phrase")
-        else:
-            raise ValueError("Invalid recovery strategy")
-
-        if not self.recovery_key:
-            raise ValueError("Recovery key not set up")
-
-        return self.recovery_key
+            if not self.security_questions:
+                raise ValueError("Security questions must be provided")
 
     def encrypt_recovery_key(self) -> None:
         """
-        Encrypt the recovery.key file using only the recovery key
+        Encrypt the recovery key
         """
-
         if not self.recovery_key:
-            raise ValueError("Recovery key not set up")
+            raise ValueError("Recovery key not set")
 
-        # Encrypt the recovery key using the derived key
+        # Encrypt the recovery key with the password
         salt = secrets.token_bytes(SALT_SIZE)
         key = CryptoManager.derive_key(self.recovery_key, salt)
 
-        CryptoManager.encrypt_file(
-            os.path.join(self.drive_path, "recovery.key"),
-            os.path.join(self.drive_path, "recovery.key"),
-            self.recovery_key,
-        )
+        # Encrypt the recovery key
+        aesgcm = AESGCM(key)
+        nonce = secrets.token_bytes(NONCE_SIZE)
+        encrypted_key = aesgcm.encrypt(nonce, self.key.encode(), None)
 
-        print("Recovery key encrypted and saved to encrypted_recovery.key")
+        # Save the encrypted key to a file
+        encrypted_key_path = os.path.join(self.drive_path, "encrypted.key")
+        with open(encrypted_key_path, "wb") as f:
+            f.write(salt + nonce + encrypted_key)
+        print(f"Encrypted recovery key saved to {encrypted_key_path}")
+        return encrypted_key_path
 
-    def decrypt_recovery_key(self, password: str) -> None:
+    def decrypt_recovery_key(self) -> str:
         """
-        Decrypt the recovery.key file using the provided password
+        Decrypt the recovery key
         """
+        encrypted_key_path = os.path.join(self.drive_path, "encrypted.key")
+        if not os.path.exists(encrypted_key_path):
+            raise FileNotFoundError(f"Encrypted key not found: {encrypted_key_path}")
 
-        if not self.recovery_key:
-            raise ValueError("Recovery key not set up")
+        with open(encrypted_key_path, "rb") as f:
+            data = f.read()
+            salt = data[:SALT_SIZE]
+            nonce = data[SALT_SIZE : SALT_SIZE + NONCE_SIZE]
+            encrypted_key = data[SALT_SIZE + NONCE_SIZE :]
 
-        file_path = os.path.join(self.drive_path, "recovery.key")
+        # Derive the key from the password
+        key = CryptoManager.derive_key(self.recovery_key, salt)
 
-        print(f"Decrypting {file_path}")
-        src_path = os.path.join(self.drive_path, file_path)
-        dest_path = os.path.join(self.drive_path, file_path[:-4])
-        self.crypto_worker = CryptoWorker("decrypt", src_path, dest_path, password)
-        self.crypto_worker.set_delete_original(True)
-        self.crypto_worker.run()
-        print(f"Decrypted {file_path} to {dest_path}")
+        # Decrypt the recovery key
+        aesgcm = AESGCM(key)
+        decrypted_key = aesgcm.decrypt(nonce, encrypted_key, None)
+        print(f"Decrypted recovery key: {decrypted_key.decode()}")
+        return decrypted_key.decode()

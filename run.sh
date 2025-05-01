@@ -8,5 +8,7 @@ if [ "$QT_QPA_PLATFORM" != "xcb" ]; then
     export QT_QPA_PLATFORM=xcb
 fi
 
+clear
+
 # Run the main.py script
 python3 main.py

@@ -21,18 +21,19 @@ import sys
 import os
 from PyQt5.QtCore import Qt
 
-from crypto import CryptoWorker, DriveCrypto
+from crypto import CryptoWorker, DriveCrypto, PasswordRecovery
 from utilities import PasswordStrengthMeter
 
 from utilities import generate_seed_phrase
 
 from qt_material import apply_stylesheet
+import hashlib
 
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        
+
         self.setWindowTitle("Secure File Cryptor")
         self.setGeometry(100, 100, 800, 600)
         self.setWindowIcon(self.load_icon())
@@ -48,6 +49,8 @@ class MainWindow(QMainWindow):
         self.worker = None
         self.current_operation = None
         self.encrypt_type = None
+
+        self.hardware_token_hash = None
 
     def load_icon(self):
         # get icon from current directory
@@ -68,7 +71,14 @@ class MainWindow(QMainWindow):
         # load from security_questions.txt
         try:
             with open("security_questions.txt", "r") as f:
-                self.security_questions = [line.strip() for line in f.readlines()]
+                self.security_questions_text = [line.strip() for line in f.readlines()]
+
+                # create a dictionary with hashes of the questions as key and questions as values
+                self.security_questions = {
+                    hashlib.sha256(question.encode()).hexdigest(): question
+                    for question in self.security_questions_text
+                }
+
         except FileNotFoundError:
             QMessageBox.warning(
                 self,
@@ -163,13 +173,13 @@ class MainWindow(QMainWindow):
 
         # Dropdown for selecting questions
         self.question1 = QComboBox()
-        self.question1.addItems(self.security_questions)
+        self.question1.addItems(self.security_questions.values())
         self.answer1 = QLineEdit()
         self.answer1.setPlaceholderText("Answer for Question 1")
         self.answer1.setEchoMode(QLineEdit.Password)
 
         self.question2 = QComboBox()
-        self.question2.addItems(self.security_questions)
+        self.question2.addItems(self.security_questions.values())
         self.answer2 = QLineEdit()
         self.answer2.setPlaceholderText("Answer for Question 2")
         self.answer2.setEchoMode(QLineEdit.Password)
@@ -457,6 +467,8 @@ class MainWindow(QMainWindow):
             if new_password != confirm_password:
                 raise ValueError("Passwords do not match")
 
+            self.recover_key()
+
             # Perform password recovery (implementation depends on your logic)
             QMessageBox.information(
                 self,
@@ -557,8 +569,124 @@ class MainWindow(QMainWindow):
                 f"Decryption of folder {self.decrypt_file_line.text()} completed."
             )
 
+    def recovery_folder_operation(
+        self, driveCrypto: DriveCrypto, old_password, new_password
+    ):
+        self.encrypt_log.append(
+            f"Old password for {self.recovery_drive_line.text()} is: {old_password}"
+        )
+        self.encrypt_log.append(driveCrypto.visualize_directory_structure_as_string())
+        self.encrypt_log.append(
+            f"Starting recovery of folder: {self.recovery_drive_line.text()}..."
+        )
+        driveCrypto.decrypt(self.new_password.text())
+        self.encrypt_log.append(
+            f"Decryption of folder {self.recovery_drive_line.text()} completed."
+        )
+        self.encrypt_log.append(
+            f"New password for {self.recovery_drive_line.text()} is: {new_password}"
+        )
+        self.encrypt_log.append(
+            f"Re-encryption of folder {self.recovery_drive_line.text()} completed."
+        )
+        driveCrypto.encrypt(new_password)
+        self.encrypt_log.append(
+            f"Re-encryption of folder {self.recovery_drive_line.text()} completed."
+        )
+
+    def save_recovery_stuff(self, operation):
+        if operation == "decrypt":
+            return
+
+        password = self.encrypt_password.text()
+        password_recovery = PasswordRecovery(self.encrypt_file_line.text(), password)
+        if self.seed_phrase_radio_btn.isChecked():
+            password_recovery.setup_key_recovery(
+                "seed_phrase", self.seed_phrase_text.toPlainText()
+            )
+        elif self.security_questions_radio_btn.isChecked():
+            questions = {
+                "question1": hashlib.sha256(
+                    self.question1.currentText().encode()
+                ).hexdigest(),
+                "question2": hashlib.sha256(
+                    self.question2.currentText().encode()
+                ).hexdigest(),
+            }
+            password_recovery.setup_key_recovery("security_questions", questions)
+        elif self.hardware_token_radio_btn.isChecked():
+            password_recovery.setup_key_recovery(
+                "hardware_token", self.hardware_token_hash
+            )
+
+        password_recovery.encrypt_recovery_key()
+        self.encrypt_log.append("Key recovery information has been saved successfully.")
+        self.encrypt_log.append(
+            f"Recovery information for {self.encrypt_file_line.text()} has been saved."
+        )
+
+    def recover_key(self):
+
+        if self.new_password.text() != self.confirm_new_password.text():
+            raise ValueError("Passwords do not match")
+        if not self.new_password.text():
+            raise ValueError("Password cannot be empty")
+
+        password_recovery = PasswordRecovery(
+            self.recovery_drive_line.text(), self.new_password.text()
+        )
+        if self.recovery_seed_phrase_radio_btn.isChecked():
+            seed_phrase = self.recovery_seed_phrase_text.toPlainText().strip()
+            if not seed_phrase:
+                raise ValueError("Seed phrase cannot be empty")
+
+            password_recovery.setup_key_recovery("seed_phrase", seed_phrase)
+
+        old_password = None
+        try:
+            old_password = password_recovery.decrypt_recovery_key()
+        except Exception as e:
+            self.show_error(f"Failed to decrypt recovery key: {str(e)}")
+            return
+
+        # show in log that new password is set
+        self.encrypt_log.append(
+            f"Old password for {self.recovery_drive_line.text()} is: {old_password}"
+        )
+        self.encrypt_log.append(
+            f"New password for {self.recovery_drive_line.text()} is: {self.new_password.text()}"
+        )
+
+        if self.encrypt_type == "folder":
+            driveCrypto = DriveCrypto((self.recovery_drive_line.text()), True)
+
+            self.recovery_folder_operation(driveCrypto)
+            return
+        else:
+            file_path = self.recovery_drive_line.text()
+            new_password = self.new_password.text()
+            output_path = self.recovery_drive_line.text()[:-4]
+
+            self.worker = CryptoWorker("decrypt", file_path, output_path, old_password)
+            self.worker.set_delete_original(True)
+            self.encrypt_log.append(f"Starting encryption of {file_path}...")
+
+            self.setup_worker_connections("decrypt")
+            self.worker.start()
+
+            self.worker.wait()
+
+            file_path, output_path = output_path, file_path
+
+            self.worker = CryptoWorker("encrypt", file_path, output_path, new_password)
+            self.worker.set_delete_original(True)
+            self.encrypt_log.append(f"Starting decryption of {file_path}...")
+
+            self.setup_worker_connections("encrypt")
+            self.worker.start()
+
     def start_operation(self, operation):
-        
+
         if self.worker and self.worker.isRunning():
             QMessageBox.warning(self, "Warning", "Another operation is in progress")
             return
@@ -569,16 +697,16 @@ class MainWindow(QMainWindow):
             )
             return
 
+        if self.recovery_section.isVisible() and (
+            self.seed_phrase_radio_btn.isChecked()
+            or self.security_questions_radio_btn.isChecked()
+            or self.hardware_token_radio_btn.isChecked()
+        ):
+            self.save_recovery_stuff(operation)
+
         try:
             if self.encrypt_type == "folder":
-                driveCrypto = DriveCrypto(
-                    (
-                        self.encrypt_file_line.text()
-                        if operation == "encrypt"
-                        else self.decrypt_file_line.text()
-                    ),
-                    self.delete_original_checkbox.isChecked(),
-                )
+                driveCrypto = None
 
                 if operation == "encrypt":
                     driveCrypto = DriveCrypto(
@@ -590,6 +718,9 @@ class MainWindow(QMainWindow):
                         self.decrypt_file_line.text(),
                         self.delete_original_checkbox_decrypt.isChecked(),
                     )
+
+                if not driveCrypto:
+                    raise ValueError("Please select a folder to encrypt/decrypt")
 
                 self.folder_operation(driveCrypto, operation)
                 return
@@ -620,7 +751,7 @@ class MainWindow(QMainWindow):
                 file_path = self.decrypt_file_line.text()
                 password = self.decrypt_password.text()
 
-                output_path = self.decrypt_file_line.text() + ".dec"
+                output_path = self.decrypt_file_line.text()[:-4]
 
                 if not file_path:
                     raise ValueError("Please select a file to decrypt")
