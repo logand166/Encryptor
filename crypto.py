@@ -1,5 +1,10 @@
 import os
 import secrets
+
+import serial
+import serial.tools.list_ports
+
+
 from PyQt5.QtCore import QThread, pyqtSignal, QMutex
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -418,3 +423,126 @@ class PasswordRecovery:
         decrypted_key = aesgcm.decrypt(nonce, encrypted_key, None)
         print(f"Decrypted recovery key: {decrypted_key.decode()}")
         return decrypted_key.decode()
+
+
+class HardwareToken:
+    def __init__(self):
+        self.ser = None
+        self.token_port = None
+        self.token_name = "No - Token"
+
+    def find_token_port(self):
+        """Find the token's serial port."""
+        ports = serial.tools.list_ports.comports()
+        for port in ports:
+            if (
+                "Board in FS mode" in port.description
+                or "MicroPython" in port.description
+                or "Board CDC" in port.description
+            ):
+                return port.device
+        raise Exception("Token not found - is it plugged in?")
+
+    def connect(self):
+        """Connect to the token."""
+        try:
+            self.token_port = self.find_token_port()
+            self.ser = serial.Serial(self.token_port, baudrate=115200, timeout=4)
+            print(f"Connected to token on {self.token_port}")
+
+            # Send commands and receive responses
+            self.ser.write(b"search:\n")
+            response: str = self.ser.readline().decode().strip()
+            if response.find("Key") == -1:
+                raise Exception("Valid Hardware Token not found - is it plugged in?")
+            else:
+                self.token_name = response
+        except Exception as e:
+            print("Error:", e)
+            self.disconnect()
+            raise
+
+    def has_space(self) -> bool:
+        """Check if the hardware token has enough space for storing data."""
+        if not self.ser or not self.ser.is_open:
+            raise Exception("Token is not connected")
+        self.ser.write(b"check:space\n")
+        response = self.ser.readline().decode().strip()
+        if response == "OK":
+            return True
+        elif response == "NO_SPACE":
+            return False
+        else:
+            raise Exception(f"Unexpected response from token: {response}")
+
+    def get_space(self) -> int:
+        """Retrieve the available space on the hardware token."""
+        if not self.ser or not self.ser.is_open:
+            raise Exception("Token is not connected")
+        self.ser.write(b"get:space\n")
+        response = self.ser.readline().decode().strip()
+        if response.startswith("SPACE:"):
+            try:
+                return int(response.split("SPACE:")[1])
+            except ValueError:
+                raise Exception(f"Invalid space value received from token: {response}")
+        else:
+            raise Exception(f"Failed to retrieve space from token: {response}")
+
+    def write_seed_phrase_to_token(self, seed_phrase: str) -> None:
+        """Write a seed phrase to the hardware token."""
+        if not self.ser or not self.ser.is_open:
+            raise Exception("Token is not connected")
+        if not self.has_space():
+            raise Exception("Token does not have enough space to store the seed phrase")
+        self.ser.write(f"add:{seed_phrase}\n".encode())
+        response = self.ser.readline().decode().strip()
+        if response != "OK":
+            raise Exception(f"Failed to write seed phrase to token: {response}")
+
+    def get_seed_phrase_from_token(self) -> str:
+        """Retrieve the seed phrase from the hardware token."""
+        if not self.ser or not self.ser.is_open:
+            raise Exception("Token is not connected")
+        self.ser.write(b"get\n")
+        response = self.ser.readline().decode().strip()
+        if response.startswith("SEED:"):
+            return response.split("SEED:")[1]
+        else:
+            raise Exception(f"Failed to retrieve seed phrase from token: {response}")
+        
+    def empty_token(self):
+        """Erase all data stored on the hardware token."""
+        if not self.ser or not self.ser.is_open:
+            raise Exception("Token is not connected")
+        self.ser.write(b"clear\n")
+        response = self.ser.readline().decode().strip()
+        if response != "OK":
+            raise Exception(f"Failed to clear token: {response}")
+        print("Token successfully cleared")
+
+    def disconnect(self):
+        """Disconnect from the token."""
+        if self.ser and self.ser.is_open:
+            self.ser.close()
+            print(f"Disconnected from {self.token_name}")
+
+
+if __name__ == "__main__":
+    token = HardwareToken()
+    try:
+        token.connect()
+        token.empty_token()
+        for i in range(1, 25):
+            seed_phrase = f"example-seed-phrase-{i}"
+            print(f"Writing seed phrase {i}: {seed_phrase}")
+            token.write_seed_phrase_to_token(seed_phrase)
+
+        print("Retrieving seed phrases from token:")
+        for i in range(1, 25):
+            retrieved_seed = token.get_seed_phrase_from_token()
+            print(f"Retrieved seed phrase {i}: {retrieved_seed}")
+    except Exception as e:
+        print(f"Error: {e}")
+    finally:
+        token.disconnect()
