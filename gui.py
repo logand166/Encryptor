@@ -1,4 +1,5 @@
 from functools import partial
+import re
 from PyQt5.QtWidgets import (
     QMainWindow,
     QWidget,
@@ -100,6 +101,65 @@ class MainWindow(QMainWindow):
                 "Please provide at least two security questions in the 'security_questions.txt' file.",
             )
             return
+
+    def load_security_questions_for_recovery(self):
+        recovery_path = self.recovery_drive_line.text().strip()        
+        if not recovery_path:
+            QMessageBox.warning(
+                self, "Warning", "Please select a file or folder for recovery."
+            )
+            return
+
+        # Determine the directory of the selected file or folder
+        if os.path.isfile(recovery_path):
+            directory = os.path.dirname(recovery_path)
+        else:
+            directory = recovery_path
+
+        # Construct the path to the security questions file
+        questions_file_path = os.path.join(directory, "security.questions")
+
+        # Load security questions from the file
+        try:
+            with open(questions_file_path, "r") as f:
+                questions = [line.strip() for line in f.readlines()]
+            if len(questions) < 2:
+                raise ValueError(
+                    "The security questions file must contain at least two questions."
+                )
+
+            question_hashes = []
+
+            for question in questions:
+                match = re.search(r"'([a-fA-F0-9]{64})'", question)
+                if match:
+                    extracted_hash = match.group(1)
+                    question_hashes.append(extracted_hash)
+                else:
+                    print("No valid hash found in the string.")
+
+            if len(question_hashes) < 2:
+                raise ValueError(
+                    "The security questions file must contain at least two questions."
+                )
+
+            self.recovery_question1.setText(
+                self.security_questions.get(question_hashes[0])
+            )
+            self.recovery_question2.setText(
+                self.security_questions.get(question_hashes[1])
+            )
+
+        except FileNotFoundError:
+            QMessageBox.warning(
+                self, "Warning", f"Security questions file not found in {directory}."
+            )
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"An error occurred while loading security questions: {str(e)}",
+            )
 
     def init_ui(self):
         self.tabs = QTabWidget()
@@ -348,6 +408,9 @@ class MainWindow(QMainWindow):
         self.recovery_security_questions_radio_btn = QRadioButton(
             "Use Security Questions"
         )
+        self.recovery_security_questions_radio_btn.toggled.connect(
+            self.load_security_questions_for_recovery
+        )
         self.recovery_question1 = QLineEdit(placeholderText="Question 1")
         self.recovery_answer1 = QLineEdit(placeholderText="Answer")
         self.recovery_question2 = QLineEdit(placeholderText="Question 2")
@@ -437,12 +500,10 @@ class MainWindow(QMainWindow):
 
     def recover_password(self):
         try:
-            # Validate recovery options
             if self.recovery_seed_phrase_radio_btn.isChecked():
                 seed_phrase = self.recovery_seed_phrase_text.toPlainText().strip()
                 if not seed_phrase:
                     raise ValueError("Seed phrase cannot be empty")
-                # Validate seed phrase (implementation depends on your logic)
 
             if self.recovery_security_questions_radio_btn.isChecked():
                 question1 = self.recovery_question1.text().strip()
@@ -453,10 +514,8 @@ class MainWindow(QMainWindow):
                     raise ValueError(
                         "All security questions and answers must be filled"
                     )
-                # Validate security questions (implementation depends on your logic)
 
             if self.recovery_hardware_token_radio_btn.isChecked():
-                # Validate hardware token (implementation depends on your logic)
                 pass
 
             # Validate new password
@@ -613,7 +672,10 @@ class MainWindow(QMainWindow):
                     self.question2.currentText().encode()
                 ).hexdigest(),
             }
-            password_recovery.setup_key_recovery("security_questions", questions)
+            recovery_key = self.answer1.text() + ";" + self.answer2.text()
+            password_recovery.setup_key_recovery(
+                "security_questions", recovery_key, questions
+            )
         elif self.hardware_token_radio_btn.isChecked():
             password_recovery.setup_key_recovery(
                 "hardware_token", self.hardware_token_hash
@@ -641,12 +703,28 @@ class MainWindow(QMainWindow):
                 raise ValueError("Seed phrase cannot be empty")
 
             password_recovery.setup_key_recovery("seed_phrase", seed_phrase)
+        elif self.recovery_security_questions_radio_btn.isChecked():
+            questions = {
+                "question1": hashlib.sha256(
+                    self.recovery_question1.text().encode()
+                ).hexdigest(),
+                "question2": hashlib.sha256(
+                    self.recovery_question2.text().encode()
+                ).hexdigest(),
+            }
+            recovery_key = (
+                self.recovery_answer1.text() + ";" + self.recovery_answer2.text()
+            )
+            password_recovery.setup_key_recovery(
+                "security_questions", recovery_key, questions
+            )
 
         old_password = None
         try:
             old_password = password_recovery.decrypt_recovery_key()
+            password_recovery.encrypt_recovery_key()
         except Exception as e:
-            self.show_error(f"Failed to decrypt recovery key: {str(e)}")
+            self.show_error(f"Failed  key: {str(e)}")
             return
 
         # show in log that new password is set

@@ -367,17 +367,11 @@ class PasswordRecovery:
             self.recovery_key = recovery_key
         elif strategy == "security_questions":
             self.recovery_key = recovery_key
-
-            # save the questions in a security_questions.txt
-            if strategy == "security_questions":
-                questions_path = os.path.join(self.drive_path, "security.questions")
-                with open(questions_path, "w") as f:
-                    for question in additional_info.items():
-                        f.write(f"{question}\n")
-                print(f"Security questions saved to {questions_path}")
-
-            if not self.security_questions:
-                raise ValueError("Security questions must be provided")
+            questions_path = os.path.join(self.drive_path, "security.questions")
+            with open(questions_path, "w") as f:
+                for question in additional_info.items():
+                    f.write(f"{question}\n")
+            print(f"Security questions saved to {questions_path}")
 
     def encrypt_recovery_key(self) -> None:
         """
