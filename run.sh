@@ -2,6 +2,7 @@
 
 # activate the virtual environment
 conda activate BASIC
+sudo chmod a+rw /dev/ttyACM0
 
 # Check if QT_QPA_PLATFORM is set to xcb
 if [ "$QT_QPA_PLATFORM" != "xcb" ]; then

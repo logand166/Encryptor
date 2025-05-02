@@ -1,5 +1,6 @@
 from functools import partial
 import re
+import time
 from PyQt5.QtWidgets import (
     QMainWindow,
     QWidget,
@@ -22,7 +23,7 @@ import sys
 import os
 from PyQt5.QtCore import Qt
 
-from crypto import CryptoWorker, DriveCrypto, PasswordRecovery
+from crypto import CryptoWorker, DriveCrypto, HardwareToken, PasswordRecovery
 from utilities import PasswordStrengthMeter
 
 from utilities import generate_seed_phrase
@@ -51,7 +52,9 @@ class MainWindow(QMainWindow):
         self.current_operation = None
         self.encrypt_type = None
 
-        self.hardware_token_hash = None
+        self.hardware_token = None
+        self.hardware_token_seed_phrase = None
+        self.recovery_hardware_token_seed_phrases = {}
 
     def load_icon(self):
         # get icon from current directory
@@ -103,7 +106,7 @@ class MainWindow(QMainWindow):
             return
 
     def load_security_questions_for_recovery(self):
-        recovery_path = self.recovery_drive_line.text().strip()        
+        recovery_path = self.recovery_drive_line.text().strip()
         if not recovery_path:
             QMessageBox.warning(
                 self, "Warning", "Please select a file or folder for recovery."
@@ -518,7 +521,10 @@ class MainWindow(QMainWindow):
                     )
 
             if self.recovery_hardware_token_radio_btn.isChecked():
-                pass
+                if len(self.recovery_hardware_token_seed_phrases) < 1:
+                    raise Exception(
+                        "Seed Phrases not Retrieved From Hardware Token"
+                    )
 
             # Validate new password
             new_password = self.new_password.text()
@@ -666,6 +672,13 @@ class MainWindow(QMainWindow):
                 "seed_phrase", self.seed_phrase_text.toPlainText()
             )
         elif self.security_questions_radio_btn.isChecked():
+
+            if self.question1.currentText() == self.question2.currentText():
+                raise Exception("Please don't select same questions!")
+
+            if self.answer1.text() == "" or self.answer2.text() == "":
+                raise Exception("Please don't leave answers empty")
+
             questions = {
                 "question1": hashlib.sha256(
                     self.question1.currentText().encode()
@@ -680,7 +693,7 @@ class MainWindow(QMainWindow):
             )
         elif self.hardware_token_radio_btn.isChecked():
             password_recovery.setup_key_recovery(
-                "hardware_token", self.hardware_token_hash
+                "hardware_token", self.hardware_token_seed_phrase
             )
 
         password_recovery.encrypt_recovery_key()
@@ -719,6 +732,11 @@ class MainWindow(QMainWindow):
             )
             password_recovery.setup_key_recovery(
                 "security_questions", recovery_key, questions
+            )
+
+        elif self.recovery_hardware_token_radio_btn.isChecked():
+            password_recovery.setup_key_recovery(
+                "hardware_token", self.recovery_hardware_token_seed_phrases.popitem()[1], self.recovery_hardware_token_seed_phrases 
             )
 
         old_password = None
@@ -777,14 +795,14 @@ class MainWindow(QMainWindow):
             )
             return
 
-        if self.recovery_section.isVisible() and (
-            self.seed_phrase_radio_btn.isChecked()
-            or self.security_questions_radio_btn.isChecked()
-            or self.hardware_token_radio_btn.isChecked()
-        ):
-            self.save_recovery_stuff(operation)
-
         try:
+            if self.recovery_section.isVisible() and (
+                self.seed_phrase_radio_btn.isChecked()
+                or self.security_questions_radio_btn.isChecked()
+                or self.hardware_token_radio_btn.isChecked()
+            ):
+                self.save_recovery_stuff(operation)
+
             if self.encrypt_type == "folder":
                 driveCrypto = None
 
@@ -906,7 +924,7 @@ class MainWindow(QMainWindow):
     def generate_seed_phrase(self):
         """Generate a random seed phrase."""
 
-        self.seed_phrase_text.setPlainText(generate_seed_phrase(128, "en"))
+        self.seed_phrase_text.setPlainText(generate_seed_phrase(256, "en"))
         QMessageBox.information(
             self,
             "Seed Phrase",
@@ -916,10 +934,55 @@ class MainWindow(QMainWindow):
 
     def register_hardware_token(self):
         """Handle hardware token registration."""
-        # Implement actual hardware token registration
-        QMessageBox.information(
-            self, "Hardware Token", "Please insert your security token now..."
-        )
+
+        if not self.hardware_token_radio_btn.isChecked():
+            QMessageBox.warning(
+                self,
+                "Hardware Token",
+                "Select the Hardware Token Option",
+            )
+            return
+
+        self.hardware_token = HardwareToken()
+
+        try:
+            self.hardware_token.connect()
+            self.encrypt_log.append(
+                f"Success: Connected to {self.hardware_token.token_name}"
+            )
+
+            self.encrypt_log.append(
+                f"Info: Key has space for {self.hardware_token.get_space()} and {'has space' if self.hardware_token.has_space() else 'is full.'}"
+            )
+
+            if not self.hardware_token.has_space():
+                QMessageBox.critical(
+                    self, "Hardware Token Full", "Can't use this token as it is full."
+                )
+                raise Exception("Can't use this token as it is full.")
+
+            self.hardware_token_seed_phrase = generate_seed_phrase(256, "en")
+            self.encrypt_log.append(
+                f"Info: The seed phrase stored in the Hardware Token is:\n {self.hardware_token_seed_phrase}\nYou can keep it if you want to recover using seed phrase."
+            )
+            self.hardware_token.write_seed_phrase_to_token(
+                self.hardware_token_seed_phrase
+            )
+
+            QMessageBox.information(
+                self,
+                "Success",
+                f"Seed Phrase Successfully stored in your {self.hardware_token.token_name}",
+            )
+
+            self.encrypt_log.append(
+                f"Success: Seed Phrase Successfully stored in your {self.hardware_token.token_name}"
+            )
+
+        except Exception as e:
+            self.encrypt_log.append(f"Error: {e}")
+        finally:
+            self.hardware_token.disconnect()
 
     def toggle_decrypt_recovery_section(self):
         """Toggle visibility of the decrypt recovery options section."""
@@ -932,9 +995,57 @@ class MainWindow(QMainWindow):
 
     def verify_hardware_token(self):
         """Handle hardware token verification during decryption."""
-        # Implement actual hardware token verification
-        QMessageBox.information(
-            self,
-            "Hardware Token",
-            "Please insert your security token for verification...",
-        )
+
+        if not self.recovery_hardware_token_radio_btn.isChecked():
+            QMessageBox.warning(
+                self,
+                "Hardware Token",
+                "Select the Hardware Token Option",
+            )
+            return
+
+        self.hardware_token = HardwareToken()
+
+        try:
+            self.hardware_token.connect()
+            self.encrypt_log.append(
+                f"Success: Connected to {self.hardware_token.token_name}"
+            )
+
+            self.encrypt_log.append(
+                f"Info: Key has space for {self.hardware_token.get_space()} and {'has space' if self.hardware_token.has_space() else 'is full.'}"
+            )
+
+            if not self.hardware_token.has_space():
+                QMessageBox.warning(
+                    self, "Hardware Token Full", "Be carefull."
+                )
+
+            self.recovery_hardware_token_seed_phrases = self.hardware_token.get_seed_phrase_from_token()
+
+            if len(self.recovery_hardware_token_seed_phrases) > 0:
+                QMessageBox.information(
+                    self,
+                    "Success",
+                    f"Seed Phrases Successfully retrieved from {self.hardware_token.token_name}",
+                )
+
+                self.encrypt_log.append(
+                    f"Success: Seed Phrases Successfully retrieved from {self.hardware_token.token_name}"
+                )
+                return
+            QMessageBox.warning(
+                    self,
+                    "Warning",
+                    f"No Seed Phrases found on {self.hardware_token.token_name}",
+                )
+
+            self.encrypt_log.append(
+                f"Success: No Seed Phrases found on {self.hardware_token.token_name}"
+            )
+
+        except Exception as e:
+            self.encrypt_log.append(f"Error: {e}")
+
+        finally:
+            self.hardware_token.disconnect()

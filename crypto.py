@@ -1,5 +1,8 @@
+import ast
+import hashlib
 import os
 import secrets
+import time
 
 import serial
 import serial.tools.list_ports
@@ -360,6 +363,7 @@ class PasswordRecovery:
         self.drive_path: str = drive_path
         self.key: str = key
         self.recovery_key: str = None
+        self.strategy = None
 
     def setup_key_recovery(
         self, strategy: str, recovery_key: str, additional_info: dict = {}
@@ -368,15 +372,20 @@ class PasswordRecovery:
         Setup key recovery strategy
         """
 
-        if strategy == "seed_phrase" or strategy == "hardware_token":
+        self.strategy = strategy
+
+        if self.strategy == "seed_phrase":
             self.recovery_key = recovery_key
-        elif strategy == "security_questions":
+        elif self.strategy == "security_questions":
             self.recovery_key = recovery_key
             questions_path = os.path.join(self.drive_path, "security.questions")
             with open(questions_path, "w") as f:
                 for question in additional_info.items():
                     f.write(f"{question}\n")
             print(f"Security questions saved to {questions_path}")
+        elif self.strategy == "hardware_token":
+            # self.recovery_keys = [seed_phrase for _, seed_phrase in additional_info]
+            self.recovery_key = recovery_key
 
     def encrypt_recovery_key(self) -> None:
         """
@@ -405,6 +414,9 @@ class PasswordRecovery:
         """
         Decrypt the recovery key
         """
+        # if self.strategy == "hardware_token":
+        #     return self.decrypt_against_multiple()
+        
         encrypted_key_path = os.path.join(self.drive_path, "encrypted.key")
         if not os.path.exists(encrypted_key_path):
             raise FileNotFoundError(f"Encrypted key not found: {encrypted_key_path}")
@@ -415,6 +427,7 @@ class PasswordRecovery:
             nonce = data[SALT_SIZE : SALT_SIZE + NONCE_SIZE]
             encrypted_key = data[SALT_SIZE + NONCE_SIZE :]
 
+
         # Derive the key from the password
         key = CryptoManager.derive_key(self.recovery_key, salt)
 
@@ -424,6 +437,33 @@ class PasswordRecovery:
         print(f"Decrypted recovery key: {decrypted_key.decode()}")
         return decrypted_key.decode()
 
+    def dedecrypt_against_multiple(self):
+        for recovery_key in self.recovery_keys:
+            try:
+                encrypted_key_path = os.path.join(self.drive_path, "encrypted.key")
+                if not os.path.exists(encrypted_key_path):
+                    raise FileNotFoundError(f"Encrypted key not found: {encrypted_key_path}")
+
+                with open(encrypted_key_path, "rb") as f:
+                    data = f.read()
+                    salt = data[:SALT_SIZE]
+                    nonce = data[SALT_SIZE : SALT_SIZE + NONCE_SIZE]
+                    encrypted_key = data[SALT_SIZE + NONCE_SIZE :]
+
+                if self.strategy == "hardware_token":
+                    self.decrypt_against_multiple()
+
+                # Derive the key from the password
+                key = CryptoManager.derive_key(self.recovery_key, salt)
+
+                # Decrypt the recovery key
+                aesgcm = AESGCM(key)
+                decrypted_key = aesgcm.decrypt(nonce, encrypted_key, None)
+                print(f"Decrypted recovery key: {decrypted_key.decode()}")
+                return decrypted_key.decode()
+            except Exception as e:
+                print(e)
+        return None
 
 class HardwareToken:
     def __init__(self):
@@ -500,17 +540,19 @@ class HardwareToken:
         if response != "OK":
             raise Exception(f"Failed to write seed phrase to token: {response}")
 
-    def get_seed_phrase_from_token(self) -> str:
+    def get_seed_phrase_from_token(self) -> dict:
         """Retrieve the seed phrase from the hardware token."""
         if not self.ser or not self.ser.is_open:
             raise Exception("Token is not connected")
         self.ser.write(b"get\n")
         response = self.ser.readline().decode().strip()
         if response.startswith("SEED:"):
-            return response.split("SEED:")[1]
+            list_seed_phrases = ast.literal_eval(response.split("SEED:")[1])
+            dict_seed_phrases = {f"Seed {i+1}": phrase for i, phrase in enumerate(list_seed_phrases)}
+            return dict_seed_phrases
         else:
             raise Exception(f"Failed to retrieve seed phrase from token: {response}")
-        
+
     def empty_token(self):
         """Erase all data stored on the hardware token."""
         if not self.ser or not self.ser.is_open:
@@ -532,16 +574,18 @@ if __name__ == "__main__":
     token = HardwareToken()
     try:
         token.connect()
-        token.empty_token()
-        for i in range(1, 25):
-            seed_phrase = f"example-seed-phrase-{i}"
-            print(f"Writing seed phrase {i}: {seed_phrase}")
-            token.write_seed_phrase_to_token(seed_phrase)
+        # # token.empty_token()
+        # # for i in range(1, 25):
+        # #     seed_phrase = f"example-seed-phrase-{i}"
+        # #     print(f"Writing seed phrase {i}: {seed_phrase}")
+        # #     token.write_seed_phrase_to_token(seed_phrase)
 
-        print("Retrieving seed phrases from token:")
-        for i in range(1, 25):
-            retrieved_seed = token.get_seed_phrase_from_token()
-            print(f"Retrieved seed phrase {i}: {retrieved_seed}")
+        # print("Retrieving seed phrases from token:")
+        # # for i in range(1, 25):
+        # retrieved_seed = token.get_seed_phrase_from_token()
+        # for seed in retrieved_seed:
+        #     print(seed)
+        token.empty_token()
     except Exception as e:
         print(f"Error: {e}")
     finally:
