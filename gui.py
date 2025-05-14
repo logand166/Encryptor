@@ -30,6 +30,8 @@ from utilities import generate_seed_phrase
 
 import hashlib
 
+from pyqtspinner.spinner import WaitingSpinner
+
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -54,6 +56,9 @@ class MainWindow(QMainWindow):
         self.hardware_token = None
         self.hardware_token_seed_phrase = None
         self.recovery_hardware_token_seed_phrases = {}
+
+        self.spinner = WaitingSpinner(self)
+        self.is_operation_running = False
 
     def load_icon(self):
         """
@@ -441,9 +446,13 @@ class MainWindow(QMainWindow):
 
         # Drive or file selection for re-encryption/recovery
         self.recovery_drive_line = QLineEdit()
-        self.recovery_drive_btn = QPushButton("Select Drive/Folder/File")
-        self.recovery_drive_btn.clicked.connect(
+        self.recovery_file_btn = QPushButton("Select File")
+        self.recovery_file_btn.clicked.connect(
             partial(self.select_files, self.recovery_drive_line, True)
+        )
+        self.recovery_drive_btn = QPushButton("Select Directory")
+        self.recovery_drive_btn.clicked.connect(
+            partial(self.select_folder, self.recovery_drive_line, True)
         )
 
         # Recovery options
@@ -499,6 +508,7 @@ class MainWindow(QMainWindow):
 
         recovery_drive_layout = QHBoxLayout()
         recovery_drive_layout.addWidget(self.recovery_drive_line)
+        recovery_drive_layout.addWidget(self.recovery_file_btn)
         recovery_drive_layout.addWidget(self.recovery_drive_btn)
 
         security_questions_layout = QVBoxLayout()
@@ -561,7 +571,7 @@ class MainWindow(QMainWindow):
         Toggles the visibility of password fields based on the given state.
 
         Args:
-            state (Qt.CheckState): The state of the checkbox, where Qt.Checked 
+            state (Qt.CheckState): The state of the checkbox, where Qt.Checked
                                    shows the passwords and other states hide them.
         """
         if state == Qt.Checked:
@@ -576,8 +586,8 @@ class MainWindow(QMainWindow):
         Toggles the visibility of the password in the decrypt password field.
 
         Args:
-            state (Qt.CheckState): The state of the checkbox, where Qt.Checked 
-                                   makes the password visible and any other state 
+            state (Qt.CheckState): The state of the checkbox, where Qt.Checked
+                                   makes the password visible and any other state
                                    hides it.
         """
         if state == Qt.Checked:
@@ -682,10 +692,12 @@ class MainWindow(QMainWindow):
             self.encrypt_log.append(
                 f"Encrypted files will be saved in: {self.encrypt_file_line.text()}"
             )
-            driveCrypto.encrypt(self.encrypt_password.text())
+            self.spinner.start()
+            driveCrypto.encrypt(self.encrypt_password.text(), self.encrypt_log)
             self.encrypt_log.append(
                 f"Encryption of folder {self.encrypt_file_line.text()} completed."
             )
+            self.spinner.stop()
         elif operation == "decrypt":
             self.decrypt_log.append(
                 driveCrypto.visualize_directory_structure_as_string()
@@ -696,7 +708,7 @@ class MainWindow(QMainWindow):
             self.decrypt_log.append(
                 f"Decrypted files will be saved in: {self.decrypt_file_line.text()}"
             )
-            driveCrypto.decrypt(self.decrypt_password.text())
+            driveCrypto.decrypt(self.decrypt_password.text(), self.decrypt_log)
             self.decrypt_log.append(
                 f"Decryption of folder {self.decrypt_file_line.text()} completed."
             )
@@ -1048,6 +1060,7 @@ class MainWindow(QMainWindow):
 
         except Exception as e:
             self.encrypt_log.append(f"Error: {e}")
+            QMessageBox.critical(self, "Error", f"{e}")
         finally:
             self.hardware_token.disconnect()
 
@@ -1113,6 +1126,7 @@ class MainWindow(QMainWindow):
 
         except Exception as e:
             self.encrypt_log.append(f"Error: {e}")
+            QMessageBox.critical(self, "Error", f"{e}")
 
         finally:
             self.hardware_token.disconnect()

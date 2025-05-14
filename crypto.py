@@ -9,6 +9,7 @@ import serial.tools.list_ports
 
 
 from PyQt5.QtCore import QThread, pyqtSignal, QMutex
+
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -298,7 +299,7 @@ class DriveCrypto:
         else:
             raise FileNotFoundError(f"File not found: {file_path}")
 
-    def encrypt(self, password: str) -> None:
+    def encrypt(self, password: str, encrypt_log=None, spinner=None) -> None:
         """
         Encrypt the files in the drive while preserving the directory structure
         and then also delete the original files
@@ -307,6 +308,8 @@ class DriveCrypto:
         for file_path, size in self.file_structure.items():
             if not file_path.endswith(".enc"):
                 print(f"Encrypting {file_path}")
+                if encrypt_log:
+                    encrypt_log.append(f"Encrypting {file_path}\n")
                 src_path = os.path.join(self.drive_path, file_path)
                 dest_path = os.path.join(self.drive_path, f"{file_path}.enc")
                 self.crypto_worker = CryptoWorker(
@@ -314,9 +317,15 @@ class DriveCrypto:
                 )
                 self.crypto_worker.set_delete_original(self.delete_original)
                 self.crypto_worker.run()
+                if encrypt_log:
+                    encrypt_log.append(f"Encrypted {file_path} to {dest_path}\n")
                 print(f"Encrypted {file_path} to {dest_path}")
 
-    def decrypt(self, password: str) -> None:
+        encrypt_log.append(
+            f"Encryption of folder completed."
+        )
+
+    def decrypt(self, password: str, decrypt_log=None, spinner=None) -> None:
         """
         Decrypt the files in the drive while preserving the directory structure
         and then also delete the original files
@@ -325,6 +334,8 @@ class DriveCrypto:
         for file_path, size in self.file_structure.items():
             if file_path.endswith(".enc"):
                 print(f"Decrypting {file_path}")
+                if decrypt_log:
+                    decrypt_log.append(f"Decrypting {file_path}\n")
                 src_path = os.path.join(self.drive_path, file_path)
                 dest_path = os.path.join(self.drive_path, file_path[:-4])
                 self.crypto_worker = CryptoWorker(
@@ -332,7 +343,11 @@ class DriveCrypto:
                 )
                 self.crypto_worker.set_delete_original(self.delete_original)
                 self.crypto_worker.run()
+                if decrypt_log:
+                    decrypt_log.append(f"Decrypted {file_path} to {dest_path}\n")
                 print(f"Decrypted {file_path} to {dest_path}")
+
+        decrypt_log.append(f"Decryption of folder completed.")
 
     def visualize_directory_structure(self) -> tuple:
         """Visualize the directory structure"""
