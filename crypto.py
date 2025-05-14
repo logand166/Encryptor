@@ -357,10 +357,10 @@ class DriveCrypto:
 
 
 class PasswordRecovery:
-    def __init__(self, drive_path: str, key: str = None):
-        if not os.path.isdir(drive_path):
-            drive_path = os.path.dirname(drive_path)
-        self.drive_path: str = drive_path
+    def __init__(self, path: str, key: str = None):
+        if not os.path.isdir(path):
+            path = os.path.dirname(path)
+        self.drive_path: str = path
         self.key: str = key
         self.recovery_key: str = None
         self.strategy = None

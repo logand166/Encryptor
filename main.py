@@ -10,7 +10,7 @@ Secure File/Folder/Drive Encryptor/Decryptor
 - Provides Password Recovery Options:
     - Seed Phrase
     - Security Questions
-    - Hardware Token
+    - Hardware Token (Pico Key)
 """
 
 import os

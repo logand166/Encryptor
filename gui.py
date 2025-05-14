@@ -18,7 +18,7 @@ from PyQt5.QtWidgets import (
     QRadioButton,
     QComboBox,
 )
-from PyQt5.QtGui import QIcon, QFontDatabase
+from PyQt5.QtGui import QIcon
 import sys
 import os
 from PyQt5.QtCore import Qt
@@ -28,7 +28,6 @@ from utilities import PasswordStrengthMeter
 
 from utilities import generate_seed_phrase
 
-from qt_material import apply_stylesheet
 import hashlib
 
 
@@ -36,8 +35,8 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-        self.setWindowTitle("Secure File Cryptor")
-        self.setGeometry(100, 100, 800, 600)
+        self.setWindowTitle("Encryptor")
+        self.setGeometry(100, 100, 1280, 720)
         self.setWindowIcon(self.load_icon())
 
         self.setWindowFlags(
@@ -57,7 +56,14 @@ class MainWindow(QMainWindow):
         self.recovery_hardware_token_seed_phrases = {}
 
     def load_icon(self):
-        # get icon from current directory
+        """
+        Loads an icon from the current path.
+
+        The icon name should be app-logo.ico
+
+        Returns:
+            QIcon: Instance of QIcon
+        """
         base_path = os.path.dirname(os.path.abspath(__file__))
 
         icon_path = os.path.join(base_path, "app-logo.ico")
@@ -68,13 +74,14 @@ class MainWindow(QMainWindow):
             return QIcon()
 
     def load_security_questions(self):
-        # Load security questions from a file or database
-        # For simplicity, we will use hardcoded questions
-        self.security_questions = []
+        """
+        Loads a database of questions from a file named 'security.questions'.
 
-        # load from security_questions.txt
+        The questions are then loaded into a dictionary with their respective hashes.
+        """
+        self.security_questions = []
         try:
-            with open("security_questions.txt", "r") as f:
+            with open("security.questions", "r") as f:
                 self.security_questions_text = [line.strip() for line in f.readlines()]
 
                 # create a dictionary with hashes of the questions as key and questions as values
@@ -87,7 +94,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(
                 self,
                 "Error",
-                "Security questions file not found. Please create a file named 'security_questions.txt' with your questions.",
+                "Security questions file not found. Please create a file named 'security.questions' with your questions.",
             )
             return
         except Exception as e:
@@ -101,11 +108,24 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(
                 self,
                 "Error",
-                "Please provide at least two security questions in the 'security_questions.txt' file.",
+                "Please provide at least two security questions in the 'security.questions' file.",
             )
             return
 
     def load_security_questions_for_recovery(self):
+        """
+        Loads security questions for account recovery from a specified file or folder.
+
+        This function retrieves the path to a recovery file or folder, determines the directory,
+        and attempts to load security questions from a file named "security.questions" in that directory.
+        It validates the file's content to ensure it contains at least two security questions with valid hashes.
+
+        Raises:
+            ValueError: If the security questions file contains fewer than two questions or if the questions
+                do not contain valid hashes.
+            FileNotFoundError: If the "security.questions" file is not found in the specified directory.
+            Exception: For any other errors encountered while loading the security questions.
+        """
         recovery_path = self.recovery_drive_line.text().strip()
         if not recovery_path:
             QMessageBox.warning(
@@ -165,6 +185,9 @@ class MainWindow(QMainWindow):
             )
 
     def init_ui(self):
+        """
+        Initializes the UI for the App
+        """
         self.tabs = QTabWidget()
         self.encrypt_tab = self.create_encrypt_tab()
         self.decrypt_tab = self.create_decrypt_tab()
@@ -175,6 +198,13 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.tabs)
 
     def create_encrypt_tab(self):
+        """
+        Creates an encrypt tab for the UI with appropriate elements
+
+        Returns:
+            QWidget: The UI for the Encrypt Tab
+        """
+
         tab = QWidget()
         layout = QVBoxLayout()
 
@@ -324,6 +354,13 @@ class MainWindow(QMainWindow):
         return tab
 
     def create_decrypt_tab(self):
+        """
+        Creates an decrypt tab for the UI with appropriate elements
+
+        Returns:
+            QWidget: The UI for the Decrypt Tab
+        """
+
         tab = QWidget()
         layout = QVBoxLayout()
 
@@ -385,6 +422,13 @@ class MainWindow(QMainWindow):
         return tab
 
     def create_recovery_tab(self):
+        """
+        Creates an recovery tab for the UI with appropriate elements
+
+        Returns:
+            QWidget: The UI for the Recovery Tab
+        """
+
         tab = QWidget()
         layout = QVBoxLayout()
 
@@ -496,12 +540,50 @@ class MainWindow(QMainWindow):
         return tab
 
     def toggle_new_password_visibility(self, state):
+        """
+        Toggles the visibility of the new password and confirmation fields
+        based on the given state.
+        Args:
+            state (Qt.CheckState): The state of the checkbox, where
+                       Qt.Checked shows the passwords and
+                       other states hide them.
+        """
+
         if state == Qt.Checked:
             self.new_password.setEchoMode(QLineEdit.Normal)
             self.confirm_new_password.setEchoMode(QLineEdit.Normal)
         else:
             self.new_password.setEchoMode(QLineEdit.Password)
             self.confirm_new_password.setEchoMode(QLineEdit.Password)
+
+    def toggle_password_visibility(self, state):
+        """
+        Toggles the visibility of password fields based on the given state.
+
+        Args:
+            state (Qt.CheckState): The state of the checkbox, where Qt.Checked 
+                                   shows the passwords and other states hide them.
+        """
+        if state == Qt.Checked:
+            self.encrypt_password.setEchoMode(QLineEdit.Normal)
+            self.encrypt_confirm.setEchoMode(QLineEdit.Normal)
+        else:
+            self.encrypt_password.setEchoMode(QLineEdit.Password)
+            self.encrypt_confirm.setEchoMode(QLineEdit.Password)
+
+    def toggle_password_visibility_decrypt(self, state):
+        """
+        Toggles the visibility of the password in the decrypt password field.
+
+        Args:
+            state (Qt.CheckState): The state of the checkbox, where Qt.Checked 
+                                   makes the password visible and any other state 
+                                   hides it.
+        """
+        if state == Qt.Checked:
+            self.decrypt_password.setEchoMode(QLineEdit.Normal)
+        else:
+            self.decrypt_password.setEchoMode(QLineEdit.Password)
 
     def recover_password(self):
         try:
@@ -522,9 +604,7 @@ class MainWindow(QMainWindow):
 
             if self.recovery_hardware_token_radio_btn.isChecked():
                 if len(self.recovery_hardware_token_seed_phrases) < 1:
-                    raise Exception(
-                        "Seed Phrases not Retrieved From Hardware Token"
-                    )
+                    raise Exception("Seed Phrases not Retrieved From Hardware Token")
 
             # Validate new password
             new_password = self.new_password.text()
@@ -536,7 +616,6 @@ class MainWindow(QMainWindow):
 
             self.recover_key()
 
-            # Perform password recovery (implementation depends on your logic)
             QMessageBox.information(
                 self,
                 "Success",
@@ -545,20 +624,6 @@ class MainWindow(QMainWindow):
 
         except Exception as e:
             self.show_error(str(e))
-
-    def toggle_password_visibility(self, state):
-        if state == Qt.Checked:
-            self.encrypt_password.setEchoMode(QLineEdit.Normal)
-            self.encrypt_confirm.setEchoMode(QLineEdit.Normal)
-        else:
-            self.encrypt_password.setEchoMode(QLineEdit.Password)
-            self.encrypt_confirm.setEchoMode(QLineEdit.Password)
-
-    def toggle_password_visibility_decrypt(self, state):
-        if state == Qt.Checked:
-            self.decrypt_password.setEchoMode(QLineEdit.Normal)
-        else:
-            self.decrypt_password.setEchoMode(QLineEdit.Password)
 
     def update_password_strength(self):
         password = self.encrypt_password.text()
@@ -736,7 +801,9 @@ class MainWindow(QMainWindow):
 
         elif self.recovery_hardware_token_radio_btn.isChecked():
             password_recovery.setup_key_recovery(
-                "hardware_token", self.recovery_hardware_token_seed_phrases.popitem()[1], self.recovery_hardware_token_seed_phrases 
+                "hardware_token",
+                self.recovery_hardware_token_seed_phrases.popitem()[1],
+                self.recovery_hardware_token_seed_phrases,
             )
 
         old_password = None
@@ -1017,11 +1084,11 @@ class MainWindow(QMainWindow):
             )
 
             if not self.hardware_token.has_space():
-                QMessageBox.warning(
-                    self, "Hardware Token Full", "Be carefull."
-                )
+                QMessageBox.warning(self, "Hardware Token Full", "Be carefull.")
 
-            self.recovery_hardware_token_seed_phrases = self.hardware_token.get_seed_phrase_from_token()
+            self.recovery_hardware_token_seed_phrases = (
+                self.hardware_token.get_seed_phrase_from_token()
+            )
 
             if len(self.recovery_hardware_token_seed_phrases) > 0:
                 QMessageBox.information(
@@ -1035,10 +1102,10 @@ class MainWindow(QMainWindow):
                 )
                 return
             QMessageBox.warning(
-                    self,
-                    "Warning",
-                    f"No Seed Phrases found on {self.hardware_token.token_name}",
-                )
+                self,
+                "Warning",
+                f"No Seed Phrases found on {self.hardware_token.token_name}",
+            )
 
             self.encrypt_log.append(
                 f"Success: No Seed Phrases found on {self.hardware_token.token_name}"
