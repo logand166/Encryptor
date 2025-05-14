@@ -91,3 +91,36 @@ def generate_seed_phrase(strength: int = 128, lang: str = "en") -> str:
     final_seed_phrase = " ".join(final_seed_list)
 
     return final_seed_phrase
+
+
+def log_activity(type: str, path: str = "./", files:str=None) -> None:
+    """
+    Log the activity of the user along with timestamp.
+    Args:
+        type (str): The type of activity to log.
+    """
+    import os
+    from datetime import datetime
+
+    # Get the current timestamp
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # Create the log message
+    if type == "encrypt":
+        log_message = f"{timestamp} - Encrypted {files if files else 'files'} in {path}\n"
+    elif type == "decrypt":
+        log_message = f"{timestamp} - Decrypted {files if files else 'files'} in {path}\n"
+    elif type == "directory-structure":
+        log_message = f"{timestamp} - \n {files}\n"
+    elif type == "error":
+        log_message = f"{timestamp} - Error occurred: {files}\n"
+    elif type == "success":
+        log_message = f"{timestamp} - Success: {files}\n"
+    else:
+        log_message = f"{timestamp} - Unknown activity: {type}\n"
+
+    # Write the log message to the log file
+    with open(os.path.join(path, "activity.log"), "a") as log_file:
+        log_file.write(log_message)
+    # Ensure the log file is closed properly
+    log_file.close()

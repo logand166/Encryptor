@@ -15,7 +15,7 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.exceptions import InvalidTag
 
-from utilities import generate_seed_phrase
+from utilities import generate_seed_phrase, log_activity
 
 # Constants
 CHUNK_SIZE = 1024 * 1024  # 1MB chunks
@@ -328,12 +328,17 @@ class DriveCrypto(QThread):
                 return
 
             print("Directory structure:")
+            log_activity(
+                "directory-structure",
+                self.drive_path,
+                self.visualize_directory_structure_as_string(),
+            )
             if self.operation == "encrypt":
                 print("Encrypting files...")
                 print(self.file_structure)
                 for file_path, size in self.file_structure.items():
                     print(f"Processing file: {file_path} - Size: {size} bytes")
-                    if not file_path.endswith(".enc"):
+                    if not file_path.endswith(".enc") and not file_path.endswith(".key") and not file_path.endswith(".log"):
                         src_path = os.path.join(self.drive_path, file_path)
                         dest_path = os.path.join(self.drive_path, f"{file_path}.enc")
                         self.status_updated.emit(f"Encrypting {file_path}")
@@ -355,7 +360,7 @@ class DriveCrypto(QThread):
 
             elif self.operation == "decrypt":
                 for file_path, size in self.file_structure.items():
-                    if file_path.endswith(".enc"):
+                    if file_path.endswith(".enc") and not file_path.endswith(".key") and not file_path.endswith(".log"):
                         src_path = os.path.join(self.drive_path, file_path)
                         dest_path = os.path.join(self.drive_path, file_path[:-4])
                         self.status_updated.emit(f"Decrypting {file_path}")
@@ -380,6 +385,7 @@ class DriveCrypto(QThread):
         except Exception as e:
             self.error_occurred.emit(f"Error: {str(e)}")
             self.operation_completed.emit(False, str(e))
+            self.result_ready.emit(False)
 
 
 class PasswordRecovery:
