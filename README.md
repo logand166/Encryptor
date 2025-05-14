@@ -22,7 +22,7 @@ Secure File Encryptor/Decryptor is designed to protect your sensitive files with
 
 ## 📦 Requirements
 
-- **🐍 Python Version**: 3.6+ (Recommended: 3.8+).
+- **🐍 Python Version**: 3.10+ (Recommended: 3.10.16).
 - **💻 Supported Systems**: Windows, macOS, Linux.
 - **📚 Dependencies**:
     - `PyQt5`
