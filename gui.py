@@ -58,7 +58,7 @@ class MainWindow(QMainWindow):
         self.recovery_hardware_token_seed_phrases = {}
 
         self.spinner = WaitingSpinner(self)
-        self.is_operation_running = False
+        self.operation_thread = None
 
     def load_icon(self):
         """
@@ -693,11 +693,15 @@ class MainWindow(QMainWindow):
                 f"Encrypted files will be saved in: {self.encrypt_file_line.text()}"
             )
             self.spinner.start()
-            driveCrypto.encrypt(self.encrypt_password.text(), self.encrypt_log)
-            self.encrypt_log.append(
-                f"Encryption of folder {self.encrypt_file_line.text()} completed."
-            )
-            self.spinner.stop()
+            driveCrypto.type = "encrypt"
+            driveCrypto.encrypt_log = self.encrypt_log
+            # driveCrypto.encrypt(self.encrypt_password.text(), self.encrypt_log)
+            self.operation_thread = driveCrypto
+            self.operation_thread.result_ready.connect(self.on_complete)
+            self.operation_thread.start()
+            # self.encrypt_log.append(
+            #     f"Encryption of folder {self.encrypt_file_line.text()} completed."
+            # )
         elif operation == "decrypt":
             self.decrypt_log.append(
                 driveCrypto.visualize_directory_structure_as_string()
@@ -862,9 +866,15 @@ class MainWindow(QMainWindow):
             self.setup_worker_connections("encrypt")
             self.worker.start()
 
+    def on_complete(self):
+        self.spinner.stop()
+
     def start_operation(self, operation):
 
         if self.worker and self.worker.isRunning():
+            QMessageBox.warning(self, "Warning", "Another operation is in progress")
+            return
+        if self.operation_thread and self.operation_thread.isRunning():
             QMessageBox.warning(self, "Warning", "Another operation is in progress")
             return
 
@@ -883,23 +893,14 @@ class MainWindow(QMainWindow):
                 self.save_recovery_stuff(operation)
 
             if self.encrypt_type == "folder":
-                driveCrypto = None
 
-                if operation == "encrypt":
-                    driveCrypto = DriveCrypto(
-                        self.encrypt_file_line.text(),
-                        self.delete_original_checkbox.isChecked(),
-                    )
-                elif operation == "decrypt":
-                    driveCrypto = DriveCrypto(
-                        self.decrypt_file_line.text(),
-                        self.delete_original_checkbox_decrypt.isChecked(),
-                    )
-
-                if not driveCrypto:
+                if not (operation == "encrypt" or operation == "decrypt"):
                     raise ValueError("Please select a folder to encrypt/decrypt")
 
-                self.folder_operation(driveCrypto, operation)
+                self.spinner.start()
+                self.setup_operation_thread(operation)
+
+
                 return
 
             if operation == "encrypt":
@@ -948,6 +949,43 @@ class MainWindow(QMainWindow):
 
         except Exception as e:
             self.show_error(str(e))
+
+    def setup_operation_thread(self, operation):
+        if operation == "encrypt":
+            self.operation_thread = DriveCrypto(
+                self.encrypt_file_line.text(), operation, self.encrypt_password.text(), self.delete_original_checkbox.isChecked()
+            )
+            self.encrypt_log.append(
+                self.operation_thread.visualize_directory_structure_as_string()
+            )
+        else:
+            self.operation_thread = DriveCrypto(
+                self.decrypt_file_line.text(), operation, self.decrypt_password.text(), self.delete_original_checkbox_decrypt.isChecked()
+            )
+            self.decrypt_log.append(
+                self.operation_thread.visualize_directory_structure_as_string()
+            )
+
+        self.operation_thread.result_ready.connect(self.on_complete)
+        self.operation_thread.progress_updated.connect(
+            lambda progress: self.encrypt_progress.setValue(progress)
+            if operation == "encrypt"
+            else self.decrypt_progress.setValue(progress)
+        )
+        self.operation_thread.status_updated.connect(
+            lambda message: self.encrypt_log.append(message)
+            if operation == "encrypt"
+            else self.decrypt_log.append(message)
+        )
+        self.operation_thread.error_occurred.connect(
+            lambda error: self.show_error(error)
+        )
+        self.operation_thread.operation_completed.connect(
+            lambda success, message: self.on_operation_complete(
+                success, message, self.encrypt_btn if operation == "encrypt" else self.decrypt_btn, self.encrypt_log if operation == "encrypt" else self.decrypt_log
+            )
+        )
+        self.operation_thread.start()
 
     def setup_worker_connections(self, operation):
         if operation == "encrypt":

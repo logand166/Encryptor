@@ -31,13 +31,14 @@ Secure File Encryptor/Decryptor is designed to protect your sensitive files with
     - `mnemonic==0.20`
     - `Unidecode==1.3.6`
     - `pyserial`
+    - `pyqtspinner`
 
 ### Installation
 
 Run the following command to install the required dependencies:
 
 ```bash
-pip install PyQt5 cryptography qt_material mnemonic==0.20 Unidecode==1.3.6 pyserial
+pip install PyQt5 cryptography qt_material mnemonic==0.20 Unidecode==1.3.6 pyserial pyqtspinner
 ```
 
 ---
