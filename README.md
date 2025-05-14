@@ -96,7 +96,7 @@ This project is licensed under the **MIT License**. Free for everyone to use and
 
 ## 📸 Preview
 
-![App Screenshot](https://github.com/logand166/Encryptor/blob/main/Screenshot.jpg?raw=true)
+![App Screenshot](./screenshot.png)
 
 ---
 
