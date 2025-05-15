@@ -197,9 +197,11 @@ class MainWindow(QMainWindow):
         self.encrypt_tab = self.create_encrypt_tab()
         self.decrypt_tab = self.create_decrypt_tab()
         self.recovery_tab = self.create_recovery_tab()
+        self.activity_log_tab = self.create_activity_log_tab()
         self.tabs.addTab(self.encrypt_tab, "Encrypt")
         self.tabs.addTab(self.decrypt_tab, "Decrypt")
         self.tabs.addTab(self.recovery_tab, "Recover Key")
+        self.tabs.addTab(self.activity_log_tab, "Activity Log")
         self.setCentralWidget(self.tabs)
 
     def create_encrypt_tab(self):
@@ -548,6 +550,63 @@ class MainWindow(QMainWindow):
 
         tab.setLayout(layout)
         return tab
+    
+    def create_activity_log_tab(self):
+        """
+        Creates an activity log tab for the UI with appropriate elements
+
+        Returns:
+            QWidget: The UI for the Activity Log Tab
+        """
+
+        tab = QWidget()
+        layout = QVBoxLayout()
+        
+        # Activity log file selection
+        self.activity_log_file_line = QLineEdit()
+        self.activity_log_file_btn = QPushButton("Select Log File")
+        self.activity_log_file_btn.clicked.connect(
+            partial(self.select_files, self.activity_log_file_line, False)
+        )
+        self.activity_log_file_line.setPlaceholderText("Select a log file to view")
+        
+        # Activity log button
+        self.activity_log_btn = QPushButton("View Log")
+        self.activity_log_btn.clicked.connect(self.view_activity_log)
+
+        # Activity log
+        self.activity_log = QTextEdit()
+        self.activity_log.setReadOnly(True)
+        
+
+        # Layout organization
+        file_layout = QHBoxLayout()
+        file_layout.addWidget(self.activity_log_file_line)
+        file_layout.addWidget(self.activity_log_file_btn)
+        file_layout.addWidget(self.activity_log_btn)
+        layout.addLayout(file_layout)
+        layout.addWidget(self.activity_log)
+
+        tab.setLayout(layout)
+        return tab
+    
+    def view_activity_log(self):
+        """
+        Opens the activity log file in a text edit widget.
+        """
+        log_file_path = self.activity_log_file_line.text()
+        # if not ending with .log
+        if not log_file_path.endswith(".log"):
+            QMessageBox.warning(self, "Warning", "Please select a .log file.")
+            return
+        if not os.path.exists(log_file_path):
+            QMessageBox.warning(self, "Warning", "Log file does not exist.")
+            return
+
+        with open(log_file_path, "r") as f:
+            log_content = f.read()
+
+        self.activity_log.setPlainText(log_content)
 
     def toggle_new_password_visibility(self, state):
         """
