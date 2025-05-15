@@ -469,7 +469,7 @@ class PasswordRecovery:
         print(f"Decrypted recovery key: {decrypted_key.decode()}")
         return decrypted_key.decode()
 
-    def dedecrypt_against_multiple(self):
+    def decrypt_against_multiple(self):
         for recovery_key in self.recovery_keys:
             try:
                 encrypted_key_path = os.path.join(self.drive_path, "encrypted.key")
@@ -606,17 +606,6 @@ if __name__ == "__main__":
     token = HardwareToken()
     try:
         token.connect()
-        # # token.empty_token()
-        # # for i in range(1, 25):
-        # #     seed_phrase = f"example-seed-phrase-{i}"
-        # #     print(f"Writing seed phrase {i}: {seed_phrase}")
-        # #     token.write_seed_phrase_to_token(seed_phrase)
-
-        # print("Retrieving seed phrases from token:")
-        # # for i in range(1, 25):
-        # retrieved_seed = token.get_seed_phrase_from_token()
-        # for seed in retrieved_seed:
-        #     print(seed)
         token.empty_token()
     except Exception as e:
         print(f"Error: {e}")
