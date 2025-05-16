@@ -23,8 +23,21 @@ LENGTH_STRENGTH = dict(zip(LENGTHS, STRENGTHS))
 
 
 class PasswordStrengthMeter:
+    """
+    A utility class to calculate the strength of a password and determine its corresponding color.
+    """
+
     @staticmethod
     def calculate_strength(password: str) -> int:
+        """
+        Calculate the strength of a given password based on its length and character diversity.
+
+        Args:
+            password (str): The password to evaluate.
+
+        Returns:
+            int: The strength of the password as a percentage (0-100).
+        """
         if not password:
             return 0
 
@@ -55,6 +68,15 @@ class PasswordStrengthMeter:
 
     @staticmethod
     def get_strength_color(strength: int) -> QColor:
+        """
+        Get the color representation of the password strength.
+
+        Args:
+            strength (int): The strength of the password as a percentage (0-100).
+
+        Returns:
+            QColor: The color representing the password strength (red, yellow, or green).
+        """
         if strength < 30:
             return QColor(255, 0, 0)  # Red
         elif strength < 70:
@@ -64,21 +86,29 @@ class PasswordStrengthMeter:
 
 
 def strength(length: int) -> int:
-    strength = LENGTH_STRENGTH[length]
-    return strength
+    """
+    Get the strength value corresponding to a given mnemonic length.
+
+    Args:
+        length (int): The length of the mnemonic phrase.
+
+    Returns:
+        int: The strength value corresponding to the length.
+    """
+    return LENGTH_STRENGTH[length]
 
 
 def generate_seed_phrase(strength: int = 128, lang: str = "en") -> str:
-    """Generate a seed phrase using the Mnemonic library.
+    """
+    Generate a seed phrase using the Mnemonic library.
+
     The seed phrase is generated based on the specified strength and language.
 
     Args:
         strength (int): The strength of the seed phrase. It should be one of the following values:
-            128, 160, 192, 224, or 256.
-            The default is 128.
+            128, 160, 192, 224, or 256. The default is 128.
         lang (str): The language for the seed phrase. It should be one of the following values:
-            "en", "zh", "zh2", "fr", "it", "ja", "ko", or "es".
-        The default is "en" (English).
+            "en", "zh", "zh2", "fr", "it", "ja", "ko", or "es". The default is "en" (English).
 
     Returns:
         str: The generated seed phrase.
@@ -92,11 +122,15 @@ def generate_seed_phrase(strength: int = 128, lang: str = "en") -> str:
 
     return final_seed_phrase
 
+
 def log_activity(type: str, path: str = "./", files: str = None) -> None:
     """
-    Log the activity of the user along with timestamp.
+    Log the activity of the user along with a timestamp.
+
     Args:
-        type (str): The type of activity to log.
+        type (str): The type of activity to log (e.g., "encrypt", "decrypt").
+        path (str): The path where the activity occurred. Default is "./".
+        files (str): The files involved in the activity. Default is None.
     """
     import os
     import csv
@@ -104,7 +138,7 @@ def log_activity(type: str, path: str = "./", files: str = None) -> None:
 
     # Get the current timestamp
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
+
     if files is None:
         return
 
@@ -143,22 +177,15 @@ def log_activity(type: str, path: str = "./", files: str = None) -> None:
             csv_writer.writerow(["Timestamp", "Activity", "Path"])
         csv_writer.writerow([timestamp, type, log_message])
 
-if __name__ == "__main__":
-    # Example usage
-    log_activity("encrypt", "./", "example.txt")
-    log_activity("decrypt", "./", "example.txt")
-    log_activity("directory-structure", "./", "example_dir")
-    log_activity("error", "./", "example_error")
-    log_activity("success", "./", "example_success")
-    log_activity("unknown", "./", "example_unknown")
-    log_activity("unknown", "./", "example_unknown")
 
-def convert_to_multi_line(text: str) -> str:
+def convert_to_multi_line(text: str, sep: str = ";") -> str:
     """
     Convert a single line of text into a multi-line string.
+
     Args:
         text (str): The input text to convert.
+
     Returns:
         str: The converted multi-line string.
     """
-    return "\n".join(text.split(";"))
+    return "\n".join(text.split(sep))
