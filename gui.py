@@ -1250,9 +1250,9 @@ class MainWindow(QMainWindow):
             log_activity(
                 type,
                 (
-                    self.encrypt_file_line.text()
+                    os.path.dirname(self.encrypt_file_line.text())
                     if type == "encrypt"
-                    else self.decrypt_file_line.text()
+                    else os.path.dirname(self.decrypt_file_line.text())
                 ),
                 f"Operation completed successfully: {message}",
             )
