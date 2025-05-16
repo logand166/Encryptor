@@ -31,6 +31,8 @@ from utilities import generate_seed_phrase
 import hashlib
 
 from pyqtspinner.spinner import WaitingSpinner
+from PyQt5.QtWidgets import QTableWidget, QTableWidgetItem, QHeaderView, QDateEdit
+from PyQt5.QtCore import QDate
 
 
 class MainWindow(QMainWindow):
@@ -550,7 +552,7 @@ class MainWindow(QMainWindow):
 
         tab.setLayout(layout)
         return tab
-    
+
     def create_activity_log_tab(self):
         """
         Creates an activity log tab for the UI with appropriate elements
@@ -561,7 +563,7 @@ class MainWindow(QMainWindow):
 
         tab = QWidget()
         layout = QVBoxLayout()
-        
+
         # Activity log file selection
         self.activity_log_file_line = QLineEdit()
         self.activity_log_file_btn = QPushButton("Select Log File")
@@ -569,27 +571,126 @@ class MainWindow(QMainWindow):
             partial(self.select_files, self.activity_log_file_line, False)
         )
         self.activity_log_file_line.setPlaceholderText("Select a log file to view")
-        
-        # Activity log button
-        self.activity_log_btn = QPushButton("View Log")
-        self.activity_log_btn.clicked.connect(self.view_activity_log)
 
-        # Activity log
-        self.activity_log = QTextEdit()
-        self.activity_log.setReadOnly(True)
-        
+        # Filters
+        filter_layout = QHBoxLayout()
+
+        # Activity type filter
+        self.activity_type_filter = QComboBox()
+        self.activity_type_filter.addItem("All")
+        self.activity_type_filter.addItem("encrypt")
+        self.activity_type_filter.addItem("decrypt")
+        self.activity_type_filter.addItem("recover")
+        self.activity_type_filter.addItem("error")
+        self.activity_type_filter.addItem("directory-structure")
+        self.activity_type_filter.addItem("success")
+        self.activity_type_filter.addItem("unknown")
+        self.activity_type_filter.currentIndexChanged.connect(self.filter_logs)
+
+        # Date range filter
+        self.start_date_filter = QDateEdit()
+        self.start_date_filter.setCalendarPopup(True)
+        self.start_date_filter.setDate(QDate.currentDate().addMonths(-1))
+        self.start_date_filter.dateChanged.connect(self.filter_logs)
+
+        self.end_date_filter = QDateEdit()
+        self.end_date_filter.setCalendarPopup(True)
+        self.end_date_filter.setDate(QDate.currentDate())
+        self.end_date_filter.dateChanged.connect(self.filter_logs)
+
+        filter_layout.addWidget(QLabel("Activity Type:"))
+        filter_layout.addWidget(self.activity_type_filter)
+        filter_layout.addWidget(QLabel("Start Date:"))
+        filter_layout.addWidget(self.start_date_filter)
+        filter_layout.addWidget(QLabel("End Date:"))
+        filter_layout.addWidget(self.end_date_filter)
+
+        # Activity log table
+        self.activity_log_table = QTableWidget()
+        self.activity_log_table.setColumnCount(3)
+        self.activity_log_table.setHorizontalHeaderLabels(["Date/Time", "Activity Type", "Details"])
+        self.activity_log_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.activity_log_table.setEditTriggers(QTableWidget.NoEditTriggers)
+
+        # Load log button
+        self.activity_log_btn = QPushButton("Load Log")
+        self.activity_log_btn.clicked.connect(self.load_activity_log)
 
         # Layout organization
         file_layout = QHBoxLayout()
         file_layout.addWidget(self.activity_log_file_line)
         file_layout.addWidget(self.activity_log_file_btn)
         file_layout.addWidget(self.activity_log_btn)
+
         layout.addLayout(file_layout)
-        layout.addWidget(self.activity_log)
+        layout.addLayout(filter_layout)
+        layout.addWidget(self.activity_log_table)
 
         tab.setLayout(layout)
         return tab
-    
+
+    def load_activity_log(self):
+        """
+        Loads the activity log from the selected file and populates the table.
+        """
+        log_file_path = self.activity_log_file_line.text()
+        if not log_file_path.endswith(".log"):
+            QMessageBox.warning(self, "Warning", "Please select a .log file.")
+            return
+        if not os.path.exists(log_file_path):
+            QMessageBox.warning(self, "Warning", "Log file does not exist.")
+            return
+
+        self.activity_log_data = []
+        try:
+            with open(log_file_path, "r") as f:
+                for line in f.readlines():
+                    parts = line.strip().split(",")
+                    if len(parts) == 3:
+                        self.activity_log_data.append(parts)
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to load log file: {str(e)}")
+            return
+
+        self.filter_logs()
+
+    def filter_logs(self):
+        """
+        Filters the activity log based on the selected activity type and date range.
+        """
+        if not hasattr(self, "activity_log_data"):
+            return
+
+        filtered_data = []
+        selected_type = self.activity_type_filter.currentText()
+        start_date = self.start_date_filter.date().toPyDate()
+        end_date = self.end_date_filter.date().toPyDate()
+
+        for entry in self.activity_log_data:
+            date_time, activity_type, details = entry
+            entry_date = QDate.fromString(date_time.split(" ")[0], "yyyy-MM-dd").toPyDate()
+
+            if selected_type != "All" and activity_type != selected_type:
+                continue
+            if not (start_date <= entry_date <= end_date):
+                continue
+
+            filtered_data.append(entry)
+
+        self.populate_log_table(filtered_data)
+
+    def populate_log_table(self, data):
+        """
+        Populates the activity log table with the given data.
+
+        Args:
+            data (list): List of log entries to display.
+        """
+        self.activity_log_table.setRowCount(len(data))
+        for row, entry in enumerate(data):
+            for col, value in enumerate(entry):
+                self.activity_log_table.setItem(row, col, QTableWidgetItem(value))
+
     def view_activity_log(self):
         """
         Opens the activity log file in a text edit widget.

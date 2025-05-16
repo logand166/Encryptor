@@ -92,14 +92,15 @@ def generate_seed_phrase(strength: int = 128, lang: str = "en") -> str:
 
     return final_seed_phrase
 
-
-def log_activity(type: str, path: str = "./", files:str=None) -> None:
+## TODO: Check the project report for what to add here
+def log_activity(type: str, path: str = "./", files: str = None) -> None:
     """
     Log the activity of the user along with timestamp.
     Args:
         type (str): The type of activity to log.
     """
     import os
+    import csv
     from datetime import datetime
 
     # Get the current timestamp
@@ -107,20 +108,41 @@ def log_activity(type: str, path: str = "./", files:str=None) -> None:
 
     # Create the log message
     if type == "encrypt":
-        log_message = f"{timestamp} - Encrypted {files if files else 'files'} in {path}\n"
+        log_message = f"Encrypted {files if files else 'files'} in {path}"
     elif type == "decrypt":
-        log_message = f"{timestamp} - Decrypted {files if files else 'files'} in {path}\n"
+        log_message = f"Decrypted {files if files else 'files'} in {path}"
     elif type == "directory-structure":
-        log_message = f"{timestamp} - \n {files}\n"
+        log_message = f"{files}"
     elif type == "error":
-        log_message = f"{timestamp} - Error occurred: {files}\n"
+        log_message = f"Error occurred: {files}"
     elif type == "success":
-        log_message = f"{timestamp} - Success: {files}\n"
+        log_message = f"Success: {files}"
+    elif type == "recover":
+        log_message = f"Recovery: {files} at {path}"
     else:
-        log_message = f"{timestamp} - Unknown activity: {type}\n"
+        type = "unknown"
+        log_message = f"Unknown activity: {type}"
 
-    # Write the log message to the log file
+    # Write the log message to a .log file
     with open(os.path.join(path, "activity.log"), "a") as log_file:
-        log_file.write(log_message)
-    # Ensure the log file is closed properly
-    log_file.close()
+        log_file.write(f"{timestamp} - {log_message}\n")
+
+    # Write the log message to a .csv file
+    csv_file_path = os.path.join(path, "activity.log")
+    file_exists = os.path.isfile(csv_file_path)
+    with open(csv_file_path, "a", newline="") as csv_file:
+        csv_writer = csv.writer(csv_file)
+        if not file_exists:
+            # Write the header if the file doesn't exist
+            csv_writer.writerow(["Timestamp", "Activity", "Path"])
+        csv_writer.writerow([timestamp, type, log_message])
+        
+if __name__ == "__main__":
+    # Example usage
+    log_activity("encrypt", "./", "example.txt")
+    log_activity("decrypt", "./", "example.txt")
+    log_activity("directory-structure", "./", "example_dir")
+    log_activity("error", "./", "example_error")
+    log_activity("success", "./", "example_success")
+    log_activity("unknown", "./", "example_unknown")
+    log_activity("unknown", "./", "example_unknown")
