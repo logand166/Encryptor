@@ -17,6 +17,7 @@ from PyQt5.QtWidgets import (
     QCheckBox,
     QRadioButton,
     QComboBox,
+    QDialog,
 )
 from PyQt5.QtGui import QIcon
 import sys
@@ -24,13 +25,15 @@ import os
 from PyQt5.QtCore import Qt
 
 from crypto import CryptoWorker, DriveCrypto, HardwareToken, PasswordRecovery
-from utilities import PasswordStrengthMeter
+from utilities import PasswordStrengthMeter, convert_to_multi_line, log_activity
 
 from utilities import generate_seed_phrase
 
 import hashlib
 
 from pyqtspinner.spinner import WaitingSpinner
+from PyQt5.QtWidgets import QTableWidget, QTableWidgetItem, QHeaderView, QDateEdit
+from PyQt5.QtCore import QDate
 
 
 class MainWindow(QMainWindow):
@@ -57,8 +60,8 @@ class MainWindow(QMainWindow):
         self.hardware_token_seed_phrase = None
         self.recovery_hardware_token_seed_phrases = {}
 
-        self.spinner = WaitingSpinner(self)
-        self.is_operation_running = False
+        self.spinner = WaitingSpinner(self, color="white")
+        self.operation_thread = None
 
     def load_icon(self):
         """
@@ -197,9 +200,11 @@ class MainWindow(QMainWindow):
         self.encrypt_tab = self.create_encrypt_tab()
         self.decrypt_tab = self.create_decrypt_tab()
         self.recovery_tab = self.create_recovery_tab()
+        self.activity_log_tab = self.create_activity_log_tab()
         self.tabs.addTab(self.encrypt_tab, "Encrypt")
         self.tabs.addTab(self.decrypt_tab, "Decrypt")
         self.tabs.addTab(self.recovery_tab, "Recover Key")
+        self.tabs.addTab(self.activity_log_tab, "Activity Log")
         self.setCentralWidget(self.tabs)
 
     def create_encrypt_tab(self):
@@ -549,6 +554,192 @@ class MainWindow(QMainWindow):
         tab.setLayout(layout)
         return tab
 
+    def create_activity_log_tab(self):
+        """
+        Creates an activity log tab for the UI with appropriate elements
+
+        Returns:
+            QWidget: The UI for the Activity Log Tab
+        """
+
+        tab = QWidget()
+        layout = QVBoxLayout()
+
+        # Activity log file selection
+        self.activity_log_file_line = QLineEdit()
+        self.activity_log_file_btn = QPushButton("Select Log File")
+        self.activity_log_file_btn.clicked.connect(
+            partial(self.select_files, self.activity_log_file_line, False)
+        )
+        self.activity_log_file_line.setPlaceholderText("Select a log file to view")
+
+        # Filters
+        filter_layout = QHBoxLayout()
+
+        # Activity type filter
+        self.activity_type_filter = QComboBox()
+        self.activity_type_filter.addItem("All")
+        self.activity_type_filter.addItem("encrypt")
+        self.activity_type_filter.addItem("decrypt")
+        self.activity_type_filter.addItem("recover")
+        self.activity_type_filter.addItem("error")
+        self.activity_type_filter.addItem("directory-structure")
+        self.activity_type_filter.addItem("success")
+        self.activity_type_filter.addItem("unknown")
+        self.activity_type_filter.currentIndexChanged.connect(self.filter_logs)
+
+        # Date range filter
+        self.start_date_filter = QDateEdit()
+        self.start_date_filter.setCalendarPopup(True)
+        self.start_date_filter.setDate(QDate.currentDate().addMonths(-1))
+        self.start_date_filter.dateChanged.connect(self.filter_logs)
+
+        self.end_date_filter = QDateEdit()
+        self.end_date_filter.setCalendarPopup(True)
+        self.end_date_filter.setDate(QDate.currentDate())
+        self.end_date_filter.dateChanged.connect(self.filter_logs)
+
+        filter_layout.addWidget(QLabel("Activity Type:"))
+        filter_layout.addWidget(self.activity_type_filter)
+        filter_layout.addWidget(QLabel("Start Date:"))
+        filter_layout.addWidget(self.start_date_filter)
+        filter_layout.addWidget(QLabel("End Date:"))
+        filter_layout.addWidget(self.end_date_filter)
+
+        # Activity log table
+        self.activity_log_table = QTableWidget()
+        self.activity_log_table.setColumnCount(3)
+        self.activity_log_table.setHorizontalHeaderLabels(
+            ["Date/Time", "Activity Type", "Details"]
+        )
+        self.activity_log_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.Stretch
+        )
+        self.activity_log_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.activity_log_table.cellClicked.connect(self.handle_cell_click)
+
+        # Load log button
+        self.activity_log_btn = QPushButton("Load Log")
+        self.activity_log_btn.clicked.connect(self.load_activity_log)
+
+        # Layout organization
+        file_layout = QHBoxLayout()
+        file_layout.addWidget(self.activity_log_file_line)
+        file_layout.addWidget(self.activity_log_file_btn)
+        file_layout.addWidget(self.activity_log_btn)
+
+        layout.addLayout(file_layout)
+        layout.addLayout(filter_layout)
+        layout.addWidget(self.activity_log_table)
+
+        tab.setLayout(layout)
+        return tab
+
+    def load_activity_log(self):
+        """
+        Loads the activity log from the selected file and populates the table.
+        """
+        log_file_path = self.activity_log_file_line.text()
+        if not log_file_path.endswith(".log"):
+            QMessageBox.warning(self, "Warning", "Please select a .log file.")
+            return
+        if not os.path.exists(log_file_path):
+            QMessageBox.warning(self, "Warning", "Log file does not exist.")
+            return
+
+        self.activity_log_data = []
+        try:
+            with open(log_file_path, "r") as f:
+                for line in f.readlines():
+                    parts = line.strip().split(",")
+                    if len(parts) == 3:
+                        self.activity_log_data.append(parts)
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to load log file: {str(e)}")
+            return
+
+        self.filter_logs()
+
+    def filter_logs(self):
+        """
+        Filters the activity log based on the selected activity type and date range.
+        """
+        if not hasattr(self, "activity_log_data"):
+            return
+
+        filtered_data = []
+        selected_type = self.activity_type_filter.currentText()
+        start_date = self.start_date_filter.date().toPyDate()
+        end_date = self.end_date_filter.date().toPyDate()
+
+        for entry in self.activity_log_data:
+            date_time, activity_type, details = entry
+            entry_date = QDate.fromString(
+                date_time.split(" ")[0], "yyyy-MM-dd"
+            ).toPyDate()
+
+            if selected_type != "All" and activity_type != selected_type:
+                continue
+            if not (start_date <= entry_date <= end_date):
+                continue
+
+            filtered_data.append(entry)
+
+        self.populate_log_table(filtered_data)
+
+    def populate_log_table(self, data):
+        """
+        Populates the activity log table with the given data.
+
+        Args:
+            data (list): List of log entries to display.
+        """
+        self.activity_log_table.setRowCount(len(data))
+        for row, entry in enumerate(data):
+            for col, value in enumerate(entry):
+                item = QTableWidgetItem(value)
+                if col == 2 and entry[1] == "directory-structure":
+                    # Make the Details cell clickable for directory-structure logs
+                    item.setForeground(Qt.blue)
+                    item.setFlags(item.flags() | Qt.ItemIsSelectable)
+                self.activity_log_table.setItem(row, col, item)
+
+    def handle_cell_click(self, row, column):
+        """
+        Handles clicks on the activity log table cells.
+
+        Args:
+            row (int): The row of the clicked cell.
+            column (int): The column of the clicked cell.
+        """
+        if column == 2:  # Details column
+            activity_type = self.activity_log_table.item(row, 1).text()
+            if activity_type == "directory-structure":
+                details = convert_to_multi_line(
+                    self.activity_log_table.item(row, column).text()
+                )
+                self.show_directory_structure_popup(details)
+
+    def show_directory_structure_popup(self, details):
+        """
+        Displays a popup with the full directory structure in a scrollable view.
+
+        Args:
+            details (str): The directory structure details to display.
+        """
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Directory Structure Details")
+        dialog.setMinimumSize(600, 400)
+
+        layout = QVBoxLayout()
+        text_edit = QTextEdit()
+        text_edit.setReadOnly(True)
+        text_edit.setPlainText(details)
+
+        layout.addWidget(text_edit)
+        dialog.setLayout(layout)
+        dialog.exec_()
+
     def toggle_new_password_visibility(self, state):
         """
         Toggles the visibility of the new password and confirmation fields
@@ -693,11 +884,15 @@ class MainWindow(QMainWindow):
                 f"Encrypted files will be saved in: {self.encrypt_file_line.text()}"
             )
             self.spinner.start()
-            driveCrypto.encrypt(self.encrypt_password.text(), self.encrypt_log)
-            self.encrypt_log.append(
-                f"Encryption of folder {self.encrypt_file_line.text()} completed."
-            )
-            self.spinner.stop()
+            driveCrypto.type = "encrypt"
+            driveCrypto.encrypt_log = self.encrypt_log
+            # driveCrypto.encrypt(self.encrypt_password.text(), self.encrypt_log)
+            self.operation_thread = driveCrypto
+            self.operation_thread.result_ready.connect(self.on_complete)
+            self.operation_thread.start()
+            # self.encrypt_log.append(
+            #     f"Encryption of folder {self.encrypt_file_line.text()} completed."
+            # )
         elif operation == "decrypt":
             self.decrypt_log.append(
                 driveCrypto.visualize_directory_structure_as_string()
@@ -834,6 +1029,12 @@ class MainWindow(QMainWindow):
             f"New password for {self.recovery_drive_line.text()} is: {self.new_password.text()}"
         )
 
+        log_activity(
+            "recover",
+            self.recovery_drive_line.text(),
+            f"Old password: {old_password} set to a New password",
+        )
+
         if self.encrypt_type == "folder":
             driveCrypto = DriveCrypto((self.recovery_drive_line.text()), True)
 
@@ -862,9 +1063,15 @@ class MainWindow(QMainWindow):
             self.setup_worker_connections("encrypt")
             self.worker.start()
 
+    def on_complete(self):
+        self.spinner.stop()
+
     def start_operation(self, operation):
 
         if self.worker and self.worker.isRunning():
+            QMessageBox.warning(self, "Warning", "Another operation is in progress")
+            return
+        if self.operation_thread and self.operation_thread.isRunning():
             QMessageBox.warning(self, "Warning", "Another operation is in progress")
             return
 
@@ -873,6 +1080,8 @@ class MainWindow(QMainWindow):
                 self, "Info", "Please select a file or folder to encrypt"
             )
             return
+
+        log_activity(operation, self.encrypt_file_line.text())
 
         try:
             if self.recovery_section.isVisible() and (
@@ -883,26 +1092,24 @@ class MainWindow(QMainWindow):
                 self.save_recovery_stuff(operation)
 
             if self.encrypt_type == "folder":
-                driveCrypto = None
 
-                if operation == "encrypt":
-                    driveCrypto = DriveCrypto(
-                        self.encrypt_file_line.text(),
-                        self.delete_original_checkbox.isChecked(),
-                    )
-                elif operation == "decrypt":
-                    driveCrypto = DriveCrypto(
-                        self.decrypt_file_line.text(),
-                        self.delete_original_checkbox_decrypt.isChecked(),
-                    )
-
-                if not driveCrypto:
+                if not (operation == "encrypt" or operation == "decrypt"):
                     raise ValueError("Please select a folder to encrypt/decrypt")
 
-                self.folder_operation(driveCrypto, operation)
+                self.setup_operation_thread(operation)
+
                 return
 
             if operation == "encrypt":
+                log_activity(
+                    operation,
+                    self.encrypt_file_line.text(),
+                    self.encrypt_file_line.text(),
+                )
+
+                if self.encrypt_file_line.text().endswith(".enc"):
+                    raise ValueError("File already encrypted")
+
                 file_path = self.encrypt_file_line.text()
                 password = self.encrypt_password.text()
                 confirm = self.encrypt_confirm.text()
@@ -925,6 +1132,15 @@ class MainWindow(QMainWindow):
                 self.encrypt_log.append(f"Starting encryption of {file_path}...")
 
             elif operation == "decrypt":
+                log_activity(
+                    operation,
+                    self.decrypt_file_line.text(),
+                    self.decrypt_file_line.text(),
+                )
+
+                if not self.decrypt_file_line.text().endswith(".enc"):
+                    raise ValueError("File already decrypted")
+
                 file_path = self.decrypt_file_line.text()
                 password = self.decrypt_password.text()
 
@@ -947,7 +1163,60 @@ class MainWindow(QMainWindow):
             self.worker.start()
 
         except Exception as e:
+            log_activity("error", files=str(e))
             self.show_error(str(e))
+
+    def setup_operation_thread(self, operation):
+        self.spinner.start()
+        if operation == "encrypt":
+            self.operation_thread = DriveCrypto(
+                self.encrypt_file_line.text(),
+                operation,
+                self.encrypt_password.text(),
+                self.delete_original_checkbox.isChecked(),
+            )
+            self.encrypt_log.append(
+                self.operation_thread.visualize_directory_structure_as_string()
+            )
+        else:
+            self.operation_thread = DriveCrypto(
+                self.decrypt_file_line.text(),
+                operation,
+                self.decrypt_password.text(),
+                self.delete_original_checkbox_decrypt.isChecked(),
+            )
+            self.decrypt_log.append(
+                self.operation_thread.visualize_directory_structure_as_string()
+            )
+
+        self.operation_thread.result_ready.connect(self.on_complete)
+        self.operation_thread.progress_updated.connect(
+            lambda progress: (
+                self.encrypt_progress.setValue(progress)
+                if operation == "encrypt"
+                else self.decrypt_progress.setValue(progress)
+            )
+        )
+        self.operation_thread.status_updated.connect(
+            lambda message: (
+                self.encrypt_log.append(message)
+                if operation == "encrypt"
+                else self.decrypt_log.append(message)
+            )
+        )
+        self.operation_thread.error_occurred.connect(
+            lambda error: self.show_error(error)
+        )
+        self.operation_thread.operation_completed.connect(
+            lambda success, message: self.on_operation_complete(
+                success,
+                message,
+                self.encrypt_btn if operation == "encrypt" else self.decrypt_btn,
+                self.encrypt_log if operation == "encrypt" else self.decrypt_log,
+                operation,
+            )
+        )
+        self.operation_thread.start()
 
     def setup_worker_connections(self, operation):
         if operation == "encrypt":
@@ -964,21 +1233,37 @@ class MainWindow(QMainWindow):
         self.worker.progress_updated.connect(progress.setValue)
         self.worker.status_updated.connect(log.append)
         self.worker.operation_completed.connect(
-            lambda success, msg: self.on_operation_complete(success, msg, btn, log)
+            lambda success, msg: self.on_operation_complete(
+                success, msg, btn, log, operation
+            )
         )
         self.worker.error_occurred.connect(lambda err: self.show_error(err, log))
         self.worker.delete_original_requested.connect(
             lambda path: log.append(f"Original file deleted: {path}")
         )
 
-    def on_operation_complete(self, success, message, btn, log):
+    def on_operation_complete(self, success, message, btn, log, type):
         btn.setEnabled(True)
         if success:
             log.append("Operation completed successfully")
             QMessageBox.information(self, "Success", message)
+            log_activity(
+                type,
+                (
+                    os.path.dirname(self.encrypt_file_line.text())
+                    if type == "encrypt"
+                    else os.path.dirname(self.decrypt_file_line.text())
+                ),
+                f"Operation completed successfully: {message}",
+            )
         else:
+            log_activity(
+                "error",
+                files=f"Operation failed: {message}",
+            )
             log.append(f"Operation failed: {message}")
             QMessageBox.critical(self, "Error", message)
+        self.spinner.stop()
 
     def show_error(self, message, log=None):
         if log:

@@ -15,7 +15,7 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.exceptions import InvalidTag
 
-from utilities import generate_seed_phrase
+from utilities import generate_seed_phrase, log_activity
 
 # Constants
 CHUNK_SIZE = 1024 * 1024  # 1MB chunks
@@ -265,23 +265,40 @@ class CryptoWorker(QThread):
             self.operation_completed.emit(False, str(e))
 
 
-class DriveCrypto:
-    def __init__(self, drive_path: str, delete_original: bool = False):
-        # Check if the path is a directory
+class DriveCrypto(QThread):
+    result_ready = pyqtSignal(int)
+    progress_updated = pyqtSignal(int)
+    status_updated = pyqtSignal(str)
+    operation_completed = pyqtSignal(bool, str)
+    error_occurred = pyqtSignal(str)
+    delete_original_requested = pyqtSignal(str)
+
+    def __init__(
+        self,
+        drive_path: str,
+        operation: str,
+        password: str,
+        delete_original: bool = False,
+    ):
+        super().__init__()
         if not os.path.isdir(drive_path):
             raise ValueError(f"Invalid drive path: {drive_path}")
-        # Check if the path is a file
-        if os.path.isfile(drive_path):
-            raise ValueError(f"Invalid drive path: {drive_path}")
         self.drive_path = drive_path
-        self.crypto_worker = None
-        self.directory_structure: dict = {}
-        self.file_structure: dict = {}
+        self.operation = operation
+        self.password = password
+        self.delete_original = delete_original
+        self.directory_structure = {}
+        self.file_structure = {}
+        self._is_running = True
+        self.mutex = QMutex()
         self.get_directory_structure()
-        self.delete_original: bool = delete_original
 
-    def get_directory_structure(self) -> tuple:
-        """Get the directory structure of the drive"""
+    def stop(self):
+        with self.mutex:
+            self._is_running = False
+
+    def get_directory_structure(self) -> None:
+        """Get the directory structure of the drive."""
         for root, dirs, files in os.walk(self.drive_path):
             relative_path = os.path.relpath(root, self.drive_path)
             self.directory_structure[relative_path] = dirs
@@ -290,73 +307,6 @@ class DriveCrypto:
                 self.file_structure[file_path] = os.path.getsize(
                     os.path.join(root, file)
                 )
-        return self.directory_structure, self.file_structure
-
-    def get_file_size(self, file_path: str) -> str:
-        """Get the size of a file"""
-        if file_path in self.file_structure:
-            return self.file_structure[file_path]
-        else:
-            raise FileNotFoundError(f"File not found: {file_path}")
-
-    def encrypt(self, password: str, encrypt_log=None, spinner=None) -> None:
-        """
-        Encrypt the files in the drive while preserving the directory structure
-        and then also delete the original files
-        """
-
-        for file_path, size in self.file_structure.items():
-            if not file_path.endswith(".enc"):
-                print(f"Encrypting {file_path}")
-                if encrypt_log:
-                    encrypt_log.append(f"Encrypting {file_path}\n")
-                src_path = os.path.join(self.drive_path, file_path)
-                dest_path = os.path.join(self.drive_path, f"{file_path}.enc")
-                self.crypto_worker = CryptoWorker(
-                    "encrypt", src_path, dest_path, password
-                )
-                self.crypto_worker.set_delete_original(self.delete_original)
-                self.crypto_worker.run()
-                if encrypt_log:
-                    encrypt_log.append(f"Encrypted {file_path} to {dest_path}\n")
-                print(f"Encrypted {file_path} to {dest_path}")
-
-        encrypt_log.append(
-            f"Encryption of folder completed."
-        )
-
-    def decrypt(self, password: str, decrypt_log=None, spinner=None) -> None:
-        """
-        Decrypt the files in the drive while preserving the directory structure
-        and then also delete the original files
-        """
-
-        for file_path, size in self.file_structure.items():
-            if file_path.endswith(".enc"):
-                print(f"Decrypting {file_path}")
-                if decrypt_log:
-                    decrypt_log.append(f"Decrypting {file_path}\n")
-                src_path = os.path.join(self.drive_path, file_path)
-                dest_path = os.path.join(self.drive_path, file_path[:-4])
-                self.crypto_worker = CryptoWorker(
-                    "decrypt", src_path, dest_path, password
-                )
-                self.crypto_worker.set_delete_original(self.delete_original)
-                self.crypto_worker.run()
-                if decrypt_log:
-                    decrypt_log.append(f"Decrypted {file_path} to {dest_path}\n")
-                print(f"Decrypted {file_path} to {dest_path}")
-
-        decrypt_log.append(f"Decryption of folder completed.")
-
-    def visualize_directory_structure(self) -> tuple:
-        """Visualize the directory structure"""
-        for dir_path, dirs in self.directory_structure.items():
-            print(f"Directory: {dir_path}")
-            for file_path, size in self.file_structure.items():
-                if os.path.dirname(file_path) == dir_path:
-                    print(f"  File: {os.path.basename(file_path)} - Size: {size} bytes")
-        return self.directory_structure, self.file_structure
 
     def visualize_directory_structure_as_string(self) -> str:
         """Visualize the directory structure as a string"""
@@ -369,6 +319,85 @@ class DriveCrypto:
                         f"  File: {os.path.basename(file_path)} - Size: {size} bytes\n"
                     )
         return structure_str
+
+    def visualize_directory_structure_as_single_line_string(self) -> str:
+        """Visualize the directory structure as a string"""
+        structure_str = ""
+        for dir_path, dirs in self.directory_structure.items():
+            structure_str += f"Directory: {dir_path};"
+            for file_path, size in self.file_structure.items():
+                if os.path.dirname(file_path) == dir_path:
+                    structure_str += (
+                        f"  File: {os.path.basename(file_path)} - Size: {size} bytes;"
+                    )
+        return structure_str
+
+    def run(self):
+        try:
+            print("Starting encryption/decryption process...")
+            if not self._is_running:
+                print("Process stopped by user.")
+                return
+
+            print("Directory structure:")
+            log_activity(
+                "directory-structure",
+                self.drive_path,
+                self.visualize_directory_structure_as_single_line_string(),
+            )
+            if self.operation == "encrypt":
+                print("Encrypting files...")
+                print(self.file_structure)
+                for file_path, size in self.file_structure.items():
+                    print(f"Processing file: {file_path} - Size: {size} bytes")
+                    if not file_path.endswith(".enc") and not file_path.endswith(".key") and not file_path.endswith(".log"):
+                        src_path = os.path.join(self.drive_path, file_path)
+                        dest_path = os.path.join(self.drive_path, f"{file_path}.enc")
+                        self.status_updated.emit(f"Encrypting {file_path}")
+                        print(f"Encrypting {src_path} to {dest_path}")
+                        CryptoManager.encrypt_file(
+                            src_path,
+                            dest_path,
+                            self.password,
+                            progress_callback=self.progress_updated.emit,
+                        )
+                        if self.delete_original:
+                            try:
+                                os.remove(src_path)
+                                self.delete_original_requested.emit(src_path)
+                            except Exception as e:
+                                self.error_occurred.emit(
+                                    f"Failed to delete {src_path}: {str(e)}"
+                                )
+
+            elif self.operation == "decrypt":
+                for file_path, size in self.file_structure.items():
+                    if file_path.endswith(".enc") and not file_path.endswith(".key") and not file_path.endswith(".log"):
+                        src_path = os.path.join(self.drive_path, file_path)
+                        dest_path = os.path.join(self.drive_path, file_path[:-4])
+                        self.status_updated.emit(f"Decrypting {file_path}")
+                        CryptoManager.decrypt_file(
+                            src_path,
+                            dest_path,
+                            self.password,
+                            progress_callback=self.progress_updated.emit,
+                        )
+                        if self.delete_original:
+                            try:
+                                os.remove(src_path)
+                                self.delete_original_requested.emit(src_path)
+                            except Exception as e:
+                                self.error_occurred.emit(
+                                    f"Failed to delete {src_path}: {str(e)}"
+                                )
+
+            self.operation_completed.emit(True, "Operation completed successfully")
+            self.result_ready.emit(True)
+
+        except Exception as e:
+            self.error_occurred.emit(f"Error: {str(e)}")
+            self.operation_completed.emit(False, str(e))
+            self.result_ready.emit(False)
 
 
 class PasswordRecovery:
@@ -452,7 +481,7 @@ class PasswordRecovery:
         print(f"Decrypted recovery key: {decrypted_key.decode()}")
         return decrypted_key.decode()
 
-    def dedecrypt_against_multiple(self):
+    def decrypt_against_multiple(self):
         for recovery_key in self.recovery_keys:
             try:
                 encrypted_key_path = os.path.join(self.drive_path, "encrypted.key")
@@ -589,17 +618,6 @@ if __name__ == "__main__":
     token = HardwareToken()
     try:
         token.connect()
-        # # token.empty_token()
-        # # for i in range(1, 25):
-        # #     seed_phrase = f"example-seed-phrase-{i}"
-        # #     print(f"Writing seed phrase {i}: {seed_phrase}")
-        # #     token.write_seed_phrase_to_token(seed_phrase)
-
-        # print("Retrieving seed phrases from token:")
-        # # for i in range(1, 25):
-        # retrieved_seed = token.get_seed_phrase_from_token()
-        # for seed in retrieved_seed:
-        #     print(seed)
         token.empty_token()
     except Exception as e:
         print(f"Error: {e}")
