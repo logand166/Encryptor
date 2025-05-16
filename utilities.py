@@ -129,9 +129,6 @@ def log_activity(type: str, path: str = "./", files: str = None) -> None:
     if os.path.isfile(path):
         path = os.path.dirname(path)
 
-    # Ensure the directory exists
-    os.makedirs(path, exist_ok=True)
-
     # Write the log message to a .log file
     with open(os.path.join(path, "activity.log"), "a") as log_file:
         log_file.write(f"{timestamp} - {log_message}\n")
