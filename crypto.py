@@ -320,6 +320,18 @@ class DriveCrypto(QThread):
                     )
         return structure_str
 
+    def visualize_directory_structure_as_single_line_string(self) -> str:
+        """Visualize the directory structure as a string"""
+        structure_str = ""
+        for dir_path, dirs in self.directory_structure.items():
+            structure_str += f"Directory: {dir_path};"
+            for file_path, size in self.file_structure.items():
+                if os.path.dirname(file_path) == dir_path:
+                    structure_str += (
+                        f"  File: {os.path.basename(file_path)} - Size: {size} bytes;"
+                    )
+        return structure_str
+
     def run(self):
         try:
             print("Starting encryption/decryption process...")
@@ -331,7 +343,7 @@ class DriveCrypto(QThread):
             log_activity(
                 "directory-structure",
                 self.drive_path,
-                self.visualize_directory_structure_as_string(),
+                self.visualize_directory_structure_as_single_line_string(),
             )
             if self.operation == "encrypt":
                 print("Encrypting files...")

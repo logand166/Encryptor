@@ -17,6 +17,7 @@ from PyQt5.QtWidgets import (
     QCheckBox,
     QRadioButton,
     QComboBox,
+    QDialog,
 )
 from PyQt5.QtGui import QIcon
 import sys
@@ -24,7 +25,7 @@ import os
 from PyQt5.QtCore import Qt
 
 from crypto import CryptoWorker, DriveCrypto, HardwareToken, PasswordRecovery
-from utilities import PasswordStrengthMeter, log_activity
+from utilities import PasswordStrengthMeter, convert_to_multi_line, log_activity
 
 from utilities import generate_seed_phrase
 
@@ -608,9 +609,14 @@ class MainWindow(QMainWindow):
         # Activity log table
         self.activity_log_table = QTableWidget()
         self.activity_log_table.setColumnCount(3)
-        self.activity_log_table.setHorizontalHeaderLabels(["Date/Time", "Activity Type", "Details"])
-        self.activity_log_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.activity_log_table.setHorizontalHeaderLabels(
+            ["Date/Time", "Activity Type", "Details"]
+        )
+        self.activity_log_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.Stretch
+        )
         self.activity_log_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.activity_log_table.cellClicked.connect(self.handle_cell_click)
 
         # Load log button
         self.activity_log_btn = QPushButton("Load Log")
@@ -668,7 +674,9 @@ class MainWindow(QMainWindow):
 
         for entry in self.activity_log_data:
             date_time, activity_type, details = entry
-            entry_date = QDate.fromString(date_time.split(" ")[0], "yyyy-MM-dd").toPyDate()
+            entry_date = QDate.fromString(
+                date_time.split(" ")[0], "yyyy-MM-dd"
+            ).toPyDate()
 
             if selected_type != "All" and activity_type != selected_type:
                 continue
@@ -689,25 +697,48 @@ class MainWindow(QMainWindow):
         self.activity_log_table.setRowCount(len(data))
         for row, entry in enumerate(data):
             for col, value in enumerate(entry):
-                self.activity_log_table.setItem(row, col, QTableWidgetItem(value))
+                item = QTableWidgetItem(value)
+                if col == 2 and entry[1] == "directory-structure":
+                    # Make the Details cell clickable for directory-structure logs
+                    item.setForeground(Qt.blue)
+                    item.setFlags(item.flags() | Qt.ItemIsSelectable)
+                self.activity_log_table.setItem(row, col, item)
 
-    def view_activity_log(self):
+    def handle_cell_click(self, row, column):
         """
-        Opens the activity log file in a text edit widget.
+        Handles clicks on the activity log table cells.
+
+        Args:
+            row (int): The row of the clicked cell.
+            column (int): The column of the clicked cell.
         """
-        log_file_path = self.activity_log_file_line.text()
-        # if not ending with .log
-        if not log_file_path.endswith(".log"):
-            QMessageBox.warning(self, "Warning", "Please select a .log file.")
-            return
-        if not os.path.exists(log_file_path):
-            QMessageBox.warning(self, "Warning", "Log file does not exist.")
-            return
+        if column == 2:  # Details column
+            activity_type = self.activity_log_table.item(row, 1).text()
+            if activity_type == "directory-structure":
+                details = convert_to_multi_line(
+                    self.activity_log_table.item(row, column).text()
+                )
+                self.show_directory_structure_popup(details)
 
-        with open(log_file_path, "r") as f:
-            log_content = f.read()
+    def show_directory_structure_popup(self, details):
+        """
+        Displays a popup with the full directory structure in a scrollable view.
 
-        self.activity_log.setPlainText(log_content)
+        Args:
+            details (str): The directory structure details to display.
+        """
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Directory Structure Details")
+        dialog.setMinimumSize(600, 400)
+
+        layout = QVBoxLayout()
+        text_edit = QTextEdit()
+        text_edit.setReadOnly(True)
+        text_edit.setPlainText(details)
+
+        layout.addWidget(text_edit)
+        dialog.setLayout(layout)
+        dialog.exec_()
 
     def toggle_new_password_visibility(self, state):
         """
@@ -998,6 +1029,12 @@ class MainWindow(QMainWindow):
             f"New password for {self.recovery_drive_line.text()} is: {self.new_password.text()}"
         )
 
+        log_activity(
+            "recover",
+            self.recovery_drive_line.text(),
+            f"Old password: {old_password} set to a New password",
+        )
+
         if self.encrypt_type == "folder":
             driveCrypto = DriveCrypto((self.recovery_drive_line.text()), True)
 
@@ -1069,6 +1106,10 @@ class MainWindow(QMainWindow):
                     self.encrypt_file_line.text(),
                     self.encrypt_file_line.text(),
                 )
+
+                if self.encrypt_file_line.text().endswith(".enc"):
+                    raise ValueError("File already encrypted")
+
                 file_path = self.encrypt_file_line.text()
                 password = self.encrypt_password.text()
                 confirm = self.encrypt_confirm.text()
@@ -1096,6 +1137,10 @@ class MainWindow(QMainWindow):
                     self.decrypt_file_line.text(),
                     self.decrypt_file_line.text(),
                 )
+
+                if not self.decrypt_file_line.text().endswith(".enc"):
+                    raise ValueError("File already decrypted")
+
                 file_path = self.decrypt_file_line.text()
                 password = self.decrypt_password.text()
 
@@ -1118,7 +1163,7 @@ class MainWindow(QMainWindow):
             self.worker.start()
 
         except Exception as e:
-            log_activity("error", self.encrypt_file_line.text(), str(e))
+            log_activity("error", files=str(e))
             self.show_error(str(e))
 
     def setup_operation_thread(self, operation):
@@ -1168,6 +1213,7 @@ class MainWindow(QMainWindow):
                 message,
                 self.encrypt_btn if operation == "encrypt" else self.decrypt_btn,
                 self.encrypt_log if operation == "encrypt" else self.decrypt_log,
+                operation,
             )
         )
         self.operation_thread.start()
@@ -1187,28 +1233,33 @@ class MainWindow(QMainWindow):
         self.worker.progress_updated.connect(progress.setValue)
         self.worker.status_updated.connect(log.append)
         self.worker.operation_completed.connect(
-            lambda success, msg: self.on_operation_complete(success, msg, btn, log)
+            lambda success, msg: self.on_operation_complete(
+                success, msg, btn, log, operation
+            )
         )
         self.worker.error_occurred.connect(lambda err: self.show_error(err, log))
         self.worker.delete_original_requested.connect(
             lambda path: log.append(f"Original file deleted: {path}")
         )
 
-    def on_operation_complete(self, success, message, btn, log):
+    def on_operation_complete(self, success, message, btn, log, type):
         btn.setEnabled(True)
         if success:
             log.append("Operation completed successfully")
             QMessageBox.information(self, "Success", message)
             log_activity(
-                "success",
-                self.encrypt_file_line.text(),
-                self.encrypt_file_line.text(),
+                type,
+                (
+                    self.encrypt_file_line.text()
+                    if type == "encrypt"
+                    else self.decrypt_file_line.text()
+                ),
+                f"Operation completed successfully: {message}",
             )
         else:
             log_activity(
                 "error",
-                self.encrypt_file_line.text(),
-                f"Operation failed: {message}",
+                files=f"Operation failed: {message}",
             )
             log.append(f"Operation failed: {message}")
             QMessageBox.critical(self, "Error", message)

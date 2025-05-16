@@ -92,7 +92,6 @@ def generate_seed_phrase(strength: int = 128, lang: str = "en") -> str:
 
     return final_seed_phrase
 
-## TODO: Check the project report for what to add here
 def log_activity(type: str, path: str = "./", files: str = None) -> None:
     """
     Log the activity of the user along with timestamp.
@@ -105,12 +104,15 @@ def log_activity(type: str, path: str = "./", files: str = None) -> None:
 
     # Get the current timestamp
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    if files is None:
+        return
 
     # Create the log message
     if type == "encrypt":
-        log_message = f"Encrypted {files if files else 'files'} in {path}"
+        log_message = f"Encrypted {files} in {path}"
     elif type == "decrypt":
-        log_message = f"Decrypted {files if files else 'files'} in {path}"
+        log_message = f"Decrypted {files} in {path}"
     elif type == "directory-structure":
         log_message = f"{files}"
     elif type == "error":
@@ -122,6 +124,13 @@ def log_activity(type: str, path: str = "./", files: str = None) -> None:
     else:
         type = "unknown"
         log_message = f"Unknown activity: {type}"
+
+    # if the path includes a file, get the directory
+    if os.path.isfile(path):
+        path = os.path.dirname(path)
+
+    # Ensure the directory exists
+    os.makedirs(path, exist_ok=True)
 
     # Write the log message to a .log file
     with open(os.path.join(path, "activity.log"), "a") as log_file:
@@ -136,7 +145,7 @@ def log_activity(type: str, path: str = "./", files: str = None) -> None:
             # Write the header if the file doesn't exist
             csv_writer.writerow(["Timestamp", "Activity", "Path"])
         csv_writer.writerow([timestamp, type, log_message])
-        
+
 if __name__ == "__main__":
     # Example usage
     log_activity("encrypt", "./", "example.txt")
@@ -146,3 +155,13 @@ if __name__ == "__main__":
     log_activity("success", "./", "example_success")
     log_activity("unknown", "./", "example_unknown")
     log_activity("unknown", "./", "example_unknown")
+
+def convert_to_multi_line(text: str) -> str:
+    """
+    Convert a single line of text into a multi-line string.
+    Args:
+        text (str): The input text to convert.
+    Returns:
+        str: The converted multi-line string.
+    """
+    return "\n".join(text.split(";"))
