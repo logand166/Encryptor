@@ -37,6 +37,62 @@ from PyQt5.QtCore import QDate
 
 
 class MainWindow(QMainWindow):
+    """MainWindow Class
+    This class represents the main window of the Encryptor application. It provides a graphical user interface (GUI) 
+    for encrypting, decrypting, and recovering files or folders. The application also includes features for setting 
+    up key recovery options, managing activity logs, and utilizing hardware tokens for secure operations.
+    Attributes:
+        worker (CryptoWorker): The worker thread for encryption or decryption operations.
+        current_operation (str): The current operation being performed (e.g., "encrypt", "decrypt").
+        encrypt_type (str): The type of encryption (e.g., "file", "folder").
+        hardware_token (HardwareToken): The hardware token instance for secure operations.
+        hardware_token_seed_phrase (str): The seed phrase stored in the hardware token.
+        recovery_hardware_token_seed_phrases (dict): Seed phrases retrieved from the hardware token.
+        spinner (WaitingSpinner): A spinner widget to indicate ongoing operations.
+        operation_thread (DriveCrypto): The thread for folder-level encryption or decryption operations.
+        security_questions (dict): A dictionary of security questions and their respective hashes.
+        security_questions_text (list): A list of security questions loaded from a file.
+    Methods:
+        __init__(): Initializes the main window and its components.
+        load_icon(): Loads the application icon from the current directory.
+        load_security_questions(): Loads security questions from a file for encryption setup.
+        load_security_questions_for_recovery(): Loads security questions for account recovery.
+        init_ui(): Initializes the user interface, including tabs for encryption, decryption, recovery, and activity logs.
+        create_encrypt_tab(): Creates the "Encrypt" tab with file selection, password input, and recovery options.
+        create_decrypt_tab(): Creates the "Decrypt" tab with file selection and password input.
+        create_recovery_tab(): Creates the "Recover Key" tab for password recovery and re-encryption.
+        create_activity_log_tab(): Creates the "Activity Log" tab for viewing and filtering activity logs.
+        load_activity_log(): Loads the activity log from a selected file.
+        filter_logs(): Filters the activity log based on activity type and date range.
+        populate_log_table(data): Populates the activity log table with filtered data.
+        handle_cell_click(row, column): Handles clicks on the activity log table cells.
+        show_directory_structure_popup(details): Displays a popup with directory structure details.
+        toggle_new_password_visibility(state): Toggles the visibility of new password fields.
+        toggle_password_visibility(state): Toggles the visibility of password fields in the "Encrypt" tab.
+        toggle_password_visibility_decrypt(state): Toggles the visibility of password fields in the "Decrypt" tab.
+        recover_password(): Handles the password recovery process based on selected recovery options.
+        update_password_strength(): Updates the password strength meter for the encryption password.
+        update_new_password_strength(): Updates the password strength meter for the new password.
+        select_files(line_edit, multi): Opens a file dialog to select files for encryption or decryption.
+        select_folder(line_edit, multi): Opens a folder dialog to select a directory for encryption or decryption.
+        select_output_file(line_edit, default_suffix): Opens a file dialog to select an output file for encryption.
+        folder_operation(driveCrypto, operation): Performs folder-level encryption or decryption operations.
+        recovery_folder_operation(driveCrypto, old_password, new_password): Handles folder recovery and re-encryption.
+        save_recovery_stuff(operation): Saves recovery information based on selected recovery options.
+        recover_key(): Recovers the encryption key using the selected recovery method.
+        on_complete(): Stops the spinner when an operation is complete.
+        start_operation(operation): Starts the encryption or decryption operation.
+        setup_operation_thread(operation): Sets up the thread for folder-level operations.
+        setup_worker_connections(operation): Sets up connections for the worker thread.
+        on_operation_complete(success, message, btn, log, type): Handles the completion of an operation.
+        show_error(message, log=None): Displays an error message in a dialog and optionally logs it.
+        closeEvent(event): Handles the close event to ensure clean termination of threads.
+        toggle_recovery_section(): Toggles the visibility of the key recovery options section.
+        generate_seed_phrase(): Generates a random seed phrase for recovery.
+        register_hardware_token(): Registers a hardware token for secure operations.
+        toggle_decrypt_recovery_section(): Toggles the visibility of the decrypt recovery options section.
+        verify_hardware_token(): Verifies the hardware token during decryption.
+    """
     def __init__(self):
         super().__init__()
 
@@ -787,6 +843,18 @@ class MainWindow(QMainWindow):
             self.decrypt_password.setEchoMode(QLineEdit.Password)
 
     def recover_password(self):
+        """
+        Handles the password recovery process based on the selected recovery method.
+        It validates the input fields, retrieves the necessary information,
+        and performs the recovery operation.
+
+        Raises:
+            ValueError: If any of the required fields are empty or invalid.
+            ValueError: If the new password and confirmation do not match.
+            Exception: If the recovery method is not selected or if the hardware token
+            ValueError: If the seed phrase is empty or if the security questions and answers are not filled.
+            ValueError: If the recovery key file is not selected.
+        """
         try:
             if self.recovery_seed_phrase_radio_btn.isChecked():
                 seed_phrase = self.recovery_seed_phrase_text.toPlainText().strip()
@@ -827,6 +895,11 @@ class MainWindow(QMainWindow):
             self.show_error(str(e))
 
     def update_password_strength(self):
+        """
+        Updates the password strength meter based on the current password input.
+        It calculates the strength of the password and sets the progress bar value
+        and color accordingly.
+        """
         password = self.encrypt_password.text()
         strength = PasswordStrengthMeter.calculate_strength(password)
         color = PasswordStrengthMeter.get_strength_color(strength)
@@ -837,6 +910,12 @@ class MainWindow(QMainWindow):
         )
 
     def update_new_password_strength(self):
+        """
+        Updates the new password strength meter based on the current new password input.
+        It calculates the strength of the new password and sets the progress bar value
+        and color accordingly.
+        """
+        
         password = self.new_password.text()
         strength = PasswordStrengthMeter.calculate_strength(password)
         color = PasswordStrengthMeter.get_strength_color(strength)
@@ -847,6 +926,12 @@ class MainWindow(QMainWindow):
         )
 
     def select_files(self, line_edit, multi):
+        """
+        Opens a file dialog to select files or folders and sets the selected path in the line edit.
+        Args:
+            line_edit (QLineEdit): The line edit to set the selected path.
+            multi (bool): If True, allows multiple file selection; otherwise, single file selection.
+        """
         if multi:
             files, _ = QFileDialog.getOpenFileNames(self, "Select Files")
             if files:
@@ -859,6 +944,12 @@ class MainWindow(QMainWindow):
         self.encrypt_type = "file" if not multi else "files"
 
     def select_folder(self, line_edit, multi):
+        """
+        Opens a folder dialog to select a folder and sets the selected path in the line edit.
+        Args:
+            line_edit (QLineEdit): The line edit to set the selected path.
+            multi (bool): If True, allows multiple folder selection; otherwise, single folder selection.
+        """
         folder = QFileDialog.getExistingDirectory(self, "Select Folder")
         if folder:
             line_edit.setText(folder)
@@ -866,6 +957,13 @@ class MainWindow(QMainWindow):
         self.encrypt_type = "folder" if folder else None
 
     def select_output_file(self, line_edit, default_suffix):
+        """
+        Opens a file dialog to select an output file and sets the selected path in the line edit.
+        Args:
+            line_edit (QLineEdit): The line edit to set the selected path.
+            default_suffix (str): The default file suffix for the output file.
+        """
+    
         file, _ = QFileDialog.getSaveFileName(
             self, "Select Output File", "", f"Encrypted Files (*.{default_suffix})"
         )
@@ -873,6 +971,12 @@ class MainWindow(QMainWindow):
             line_edit.setText(file)
 
     def folder_operation(self, driveCrypto: DriveCrypto, operation):
+        """
+        Performs the encryption or decryption operation on the selected folder.
+        Args:
+            driveCrypto (DriveCrypto): The DriveCrypto instance to perform the operation.
+            operation (str): The operation to perform ("encrypt" or "decrypt").
+        """
         if operation == "encrypt":
             self.encrypt_log.append(
                 driveCrypto.visualize_directory_structure_as_string()
@@ -911,6 +1015,13 @@ class MainWindow(QMainWindow):
     def recovery_folder_operation(
         self, driveCrypto: DriveCrypto, old_password, new_password
     ):
+        """
+        Performs the recovery operation on the selected folder.
+        Args:
+            driveCrypto (DriveCrypto): The DriveCrypto instance to perform the operation.
+            old_password (str): The old password for the folder.
+            new_password (str): The new password for the folder.
+        """
         self.encrypt_log.append(
             f"Old password for {self.recovery_drive_line.text()} is: {old_password}"
         )
@@ -934,6 +1045,11 @@ class MainWindow(QMainWindow):
         )
 
     def save_recovery_stuff(self, operation):
+        """
+        Saves the recovery information based on the selected method (seed phrase, security questions, or hardware token).
+        Args:
+            operation (str): The operation to perform ("encrypt" or "decrypt").
+        """
         if operation == "decrypt":
             return
 
@@ -975,7 +1091,11 @@ class MainWindow(QMainWindow):
         )
 
     def recover_key(self):
-
+        """
+        Handles the recovery of the encryption key based on the selected recovery method.
+        It validates the input fields, retrieves the necessary information,
+        and performs the recovery operation.
+        """
         if self.new_password.text() != self.confirm_new_password.text():
             raise ValueError("Passwords do not match")
         if not self.new_password.text():
@@ -1064,10 +1184,17 @@ class MainWindow(QMainWindow):
             self.worker.start()
 
     def on_complete(self):
+        """
+        Handles the completion of the operation and stops the spinner.
+        """
         self.spinner.stop()
 
     def start_operation(self, operation):
-
+        """
+        Starts the encryption or decryption operation based on the selected operation.
+        Args:
+            operation (str): The operation to perform ("encrypt" or "decrypt").
+        """
         if self.worker and self.worker.isRunning():
             QMessageBox.warning(self, "Warning", "Another operation is in progress")
             return
@@ -1167,6 +1294,11 @@ class MainWindow(QMainWindow):
             self.show_error(str(e))
 
     def setup_operation_thread(self, operation):
+        """
+        Sets up the operation thread for encryption or decryption.
+        Args:
+            operation (str): The operation to perform ("encrypt" or "decrypt").
+        """
         self.spinner.start()
         if operation == "encrypt":
             self.operation_thread = DriveCrypto(
@@ -1219,6 +1351,11 @@ class MainWindow(QMainWindow):
         self.operation_thread.start()
 
     def setup_worker_connections(self, operation):
+        """
+        Sets up the connections for the worker thread based on the operation type.
+        Args:
+            operation (str): The operation to perform ("encrypt" or "decrypt").
+        """
         if operation == "encrypt":
             log = self.encrypt_log
             progress = self.encrypt_progress
@@ -1243,6 +1380,15 @@ class MainWindow(QMainWindow):
         )
 
     def on_operation_complete(self, success, message, btn, log, type):
+        """
+        Handles the completion of the encryption or decryption operation.
+        Args:
+            success (bool): Indicates whether the operation was successful.
+            message (str): The message to display.
+            btn (QPushButton): The button to enable/disable.
+            log (QTextEdit): The log widget to append messages to.
+            type (str): The type of operation ("encrypt" or "decrypt").
+        """
         btn.setEnabled(True)
         if success:
             log.append("Operation completed successfully")
@@ -1266,11 +1412,23 @@ class MainWindow(QMainWindow):
         self.spinner.stop()
 
     def show_error(self, message, log=None):
+        """
+        Displays an error message in a message box and logs it if provided.
+        Args:
+            message (str): The error message to display.
+            log (QTextEdit, optional): The log widget to append the error message to.
+        """
         if log:
             log.append(f"Error: {message}")
         QMessageBox.critical(self, "Error", message)
 
     def closeEvent(self, event):
+        """
+        Handles the close event of the main window.
+        It stops the worker thread if it's running and waits for it to finish.
+        Args:
+            event (QCloseEvent): The close event.
+        """
         if self.worker and self.worker.isRunning():
             self.worker.stop()
             self.worker.wait(2000)  # Wait up to 2 seconds for clean exit

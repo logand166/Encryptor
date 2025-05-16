@@ -27,9 +27,57 @@ MAX_FILE_SIZE = 10 * 1024 * 1024 * 1024  # 10GB
 
 
 class CryptoManager:
+    """
+    CryptoManager
+
+    A utility class for secure file encryption and decryption using AES-GCM with PBKDF2 key derivation.
+    This class provides methods to encrypt and decrypt files with chunk-based processing, ensuring
+    data integrity and confidentiality.
+
+    Methods:
+        derive_key(password: str, salt: bytes) -> bytes:
+            Derives a cryptographic key from a password and salt using PBKDF2 with HMAC-SHA256.
+
+        encrypt_file(src_path: str, dest_path: str, password: str, progress_callback=None) -> None:
+            Encrypts a file securely using AES-GCM with a unique nonce per chunk. Supports progress tracking.
+
+        decrypt_file(src_path: str, dest_path: str, password: str, progress_callback=None) -> None:
+            Decrypts a file securely using AES-GCM with chunk validation. Supports progress tracking.
+
+    Constants (not defined in this snippet but required):
+        SALT_SIZE: int
+            The size of the salt in bytes.
+        KEY_SIZE: int
+            The size of the derived key in bytes.
+        ITERATIONS: int
+            The number of iterations for PBKDF2 key derivation.
+        CHUNK_SIZE: int
+            The size of each chunk to be processed in bytes.
+        NONCE_SIZE: int
+            The size of the nonce in bytes.
+        MAX_FILE_SIZE: int
+            The maximum allowed file size for encryption in bytes.
+
+    Exceptions:
+        ValueError:
+            Raised for invalid input parameters or failed operations.
+        FileNotFoundError:
+            Raised if the source file does not exist.
+        RuntimeError:
+            Raised for general encryption or decryption failures.
+        InvalidTag:
+            Raised during decryption if authentication fails (e.g., incorrect password or tampered file).
+    """
+
     @staticmethod
     def derive_key(password: str, salt: bytes) -> bytes:
-        """Secure key derivation with error handling"""
+        """Secure key derivation with error handling
+        Args:
+            password (str): The password to derive the key from.
+            salt (bytes): The salt used for key derivation.
+        Returns:
+            bytes: The derived key.
+        """
         if not password:
             raise ValueError("Password cannot be empty")
         if len(salt) != SALT_SIZE:
@@ -50,7 +98,17 @@ class CryptoManager:
     def encrypt_file(
         src_path: str, dest_path: str, password: str, progress_callback=None
     ) -> None:
-        """Secure file encryption with chunk processing using unique nonce per chunk"""
+        """Secure file encryption with chunk processing using unique nonce per chunk
+        Args:
+            src_path (str): The path to the source file to encrypt.
+            dest_path (str): The path to save the encrypted file.
+            password (str): The password for encryption.
+            progress_callback (callable, optional): A callback function to report progress.
+        Raises:
+            FileNotFoundError: If the source file does not exist.
+            ValueError: If the file is too large or if the password is invalid.
+            RuntimeError: If encryption fails.
+        """
         if not os.path.exists(src_path):
             raise FileNotFoundError(f"Source file not found: {src_path}")
 
@@ -106,7 +164,17 @@ class CryptoManager:
     def decrypt_file(
         src_path: str, dest_path: str, password: str, progress_callback=None
     ) -> None:
-        """Secure file decryption with chunk validation"""
+        """Secure file decryption with chunk validation
+        Args:
+            src_path (str): The path to the encrypted file.
+            dest_path (str): The path to save the decrypted file.
+            password (str): The password for decryption.
+            progress_callback (callable, optional): A callback function to report progress.
+        Raises:
+            FileNotFoundError: If the source file does not exist.
+            ValueError: If the file structure is invalid or if the password is incorrect.
+            RuntimeError: If decryption fails.
+        """
         if not os.path.exists(src_path):
             raise FileNotFoundError(f"Source file not found: {src_path}")
 
@@ -196,6 +264,41 @@ class CryptoManager:
 
 
 class CryptoWorker(QThread):
+    """
+    CryptoWorker
+    A worker thread for performing encryption and decryption operations.
+    This class inherits from QThread and emits signals to update the progress,
+    status, and completion of the operation.
+    It handles the encryption and decryption of files using the CryptoManager class.
+    It also manages the deletion of original files if requested.
+    It provides a thread-safe way to perform long-running operations without blocking the GUI.
+    It emits signals to update the progress, status, and completion of the operation.
+    It also handles errors and exceptions that may occur during the operation.
+    It provides a way to stop the operation gracefully.
+
+    Args:
+        QThread (QThread): Inherits from QThread to run the encryption/decryption in a separate thread.
+    Attributes:
+        operation (str): The operation to perform ("encrypt" or "decrypt").
+        args (tuple): The arguments for the operation (source path, destination path, password).
+        _is_running (bool): Flag to indicate if the thread is running.
+        mutex (QMutex): Mutex for thread safety.
+        delete_original (bool): Flag to indicate if the original file should be deleted after encryption/decryption.
+    Signals:
+        progress_updated (int): Signal emitted to update the progress of the operation.
+        status_updated (str): Signal emitted to update the status of the operation.
+        operation_completed (bool, str): Signal emitted when the operation is completed.
+        error_occurred (str): Signal emitted when an error occurs during the operation.
+        delete_original_requested (str): Signal emitted when a request to delete the original file is made.
+    Methods:
+        set_delete_original(delete: bool) -> None:
+            Sets the flag to indicate if the original file should be deleted.
+        stop() -> None:
+            Stops the operation gracefully.
+        run() -> None:
+            Runs the encryption/decryption operation in a separate thread.
+    """
+
     progress_updated = pyqtSignal(int)
     status_updated = pyqtSignal(str)
     operation_completed = pyqtSignal(bool, str)
@@ -211,13 +314,16 @@ class CryptoWorker(QThread):
         self.delete_original = False
 
     def set_delete_original(self, delete):
+        """Set the flag to indicate if the original file should be deleted."""
         self.delete_original = delete
 
     def stop(self):
+        """Stop the operation gracefully."""
         with self.mutex:
             self._is_running = False
 
     def run(self):
+        """Run the encryption/decryption operation in a separate thread."""
         try:
             if not self._is_running:
                 return
@@ -266,6 +372,48 @@ class CryptoWorker(QThread):
 
 
 class DriveCrypto(QThread):
+    """
+    DriveCrypto
+    A worker thread for performing encryption and decryption operations on a drive.
+    This class inherits from QThread and emits signals to update the progress,
+    status, and completion of the operation.
+    It handles the encryption and decryption of files using the CryptoManager class.
+    It also manages the deletion of original files if requested.
+    It provides a thread-safe way to perform long-running operations without blocking the GUI.
+    It emits signals to update the progress, status, and completion of the operation.
+    It also handles errors and exceptions that may occur during the operation.
+
+    Args:
+        QThread (QThread): Inherits from QThread to run the encryption/decryption in a separate thread.
+    Attributes:
+        drive_path (str): The path to the drive to encrypt/decrypt.
+        operation (str): The operation to perform ("encrypt" or "decrypt").
+        password (str): The password for encryption/decryption.
+        delete_original (bool): Flag to indicate if the original file should be deleted after encryption/decryption.
+        directory_structure (dict): Dictionary to store the directory structure of the drive.
+        file_structure (dict): Dictionary to store the file structure of the drive.
+        _is_running (bool): Flag to indicate if the thread is running.
+        mutex (QMutex): Mutex for thread safety.
+    Signals:
+        result_ready (int): Signal emitted when the operation is completed.
+        progress_updated (int): Signal emitted to update the progress of the operation.
+        status_updated (str): Signal emitted to update the status of the operation.
+        operation_completed (bool, str): Signal emitted when the operation is completed.
+        error_occurred (str): Signal emitted when an error occurs during the operation.
+        delete_original_requested (str): Signal emitted when a request to delete the original file is made.
+    Methods:
+        stop() -> None:
+            Stops the operation gracefully.
+        get_directory_structure() -> None:
+            Gets the directory structure of the drive.
+        visualize_directory_structure_as_string() -> str:
+            Visualizes the directory structure as a string.
+        visualize_directory_structure_as_single_line_string() -> str:
+            Visualizes the directory structure as a single line string.
+        run() -> None:
+            Runs the encryption/decryption operation in a separate thread.
+    """
+
     result_ready = pyqtSignal(int)
     progress_updated = pyqtSignal(int)
     status_updated = pyqtSignal(str)
@@ -294,6 +442,7 @@ class DriveCrypto(QThread):
         self.get_directory_structure()
 
     def stop(self):
+        """Stop the operation gracefully."""
         with self.mutex:
             self._is_running = False
 
@@ -333,6 +482,7 @@ class DriveCrypto(QThread):
         return structure_str
 
     def run(self):
+        """Run the encryption/decryption operation in a separate thread."""
         try:
             print("Starting encryption/decryption process...")
             if not self._is_running:
@@ -350,7 +500,11 @@ class DriveCrypto(QThread):
                 print(self.file_structure)
                 for file_path, size in self.file_structure.items():
                     print(f"Processing file: {file_path} - Size: {size} bytes")
-                    if not file_path.endswith(".enc") and not file_path.endswith(".key") and not file_path.endswith(".log"):
+                    if (
+                        not file_path.endswith(".enc")
+                        and not file_path.endswith(".key")
+                        and not file_path.endswith(".log")
+                    ):
                         src_path = os.path.join(self.drive_path, file_path)
                         dest_path = os.path.join(self.drive_path, f"{file_path}.enc")
                         self.status_updated.emit(f"Encrypting {file_path}")
@@ -372,7 +526,11 @@ class DriveCrypto(QThread):
 
             elif self.operation == "decrypt":
                 for file_path, size in self.file_structure.items():
-                    if file_path.endswith(".enc") and not file_path.endswith(".key") and not file_path.endswith(".log"):
+                    if (
+                        file_path.endswith(".enc")
+                        and not file_path.endswith(".key")
+                        and not file_path.endswith(".log")
+                    ):
                         src_path = os.path.join(self.drive_path, file_path)
                         dest_path = os.path.join(self.drive_path, file_path[:-4])
                         self.status_updated.emit(f"Decrypting {file_path}")
@@ -414,6 +572,10 @@ class PasswordRecovery:
     ) -> None:
         """
         Setup key recovery strategy
+        Args:
+            strategy (str): The recovery strategy to use (e.g., "seed_phrase", "security_questions
+            recovery_key (str): The recovery key to use.
+            additional_info (dict): Additional information for the recovery strategy.
         """
 
         self.strategy = strategy
@@ -460,7 +622,7 @@ class PasswordRecovery:
         """
         # if self.strategy == "hardware_token":
         #     return self.decrypt_against_multiple()
-        
+
         encrypted_key_path = os.path.join(self.drive_path, "encrypted.key")
         if not os.path.exists(encrypted_key_path):
             raise FileNotFoundError(f"Encrypted key not found: {encrypted_key_path}")
@@ -470,7 +632,6 @@ class PasswordRecovery:
             salt = data[:SALT_SIZE]
             nonce = data[SALT_SIZE : SALT_SIZE + NONCE_SIZE]
             encrypted_key = data[SALT_SIZE + NONCE_SIZE :]
-
 
         # Derive the key from the password
         key = CryptoManager.derive_key(self.recovery_key, salt)
@@ -482,11 +643,16 @@ class PasswordRecovery:
         return decrypted_key.decode()
 
     def decrypt_against_multiple(self):
+        """
+        Decrypt the recovery key against multiple hardware tokens
+        """
         for recovery_key in self.recovery_keys:
             try:
                 encrypted_key_path = os.path.join(self.drive_path, "encrypted.key")
                 if not os.path.exists(encrypted_key_path):
-                    raise FileNotFoundError(f"Encrypted key not found: {encrypted_key_path}")
+                    raise FileNotFoundError(
+                        f"Encrypted key not found: {encrypted_key_path}"
+                    )
 
                 with open(encrypted_key_path, "rb") as f:
                     data = f.read()
@@ -509,7 +675,16 @@ class PasswordRecovery:
                 print(e)
         return None
 
+
 class HardwareToken:
+    """
+    HardwareToken
+    A class for managing a hardware token (e.g., Pico Key) for secure storage of seed phrases.
+    This class provides methods to connect to the token, check available space,
+    write and retrieve seed phrases, and clear the token's data.
+    It uses the serial library to communicate with the token over a serial port.
+    It provides a way to securely store and retrieve seed phrases using the hardware token.
+    """
     def __init__(self):
         self.ser = None
         self.token_port = None
@@ -592,7 +767,9 @@ class HardwareToken:
         response = self.ser.readline().decode().strip()
         if response.startswith("SEED:"):
             list_seed_phrases = ast.literal_eval(response.split("SEED:")[1])
-            dict_seed_phrases = {f"Seed {i+1}": phrase for i, phrase in enumerate(list_seed_phrases)}
+            dict_seed_phrases = {
+                f"Seed {i+1}": phrase for i, phrase in enumerate(list_seed_phrases)
+            }
             return dict_seed_phrases
         else:
             raise Exception(f"Failed to retrieve seed phrase from token: {response}")
